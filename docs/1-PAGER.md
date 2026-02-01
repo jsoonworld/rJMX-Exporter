@@ -1,112 +1,233 @@
-# [Project 1-Pager] Rust 기반 고성능 JMX Metric Exporter
+# rJMX-Exporter Design Document
 
-## 1. 프로젝트 개요 (Overview)
+> **Status: Design Phase** - Implementation not yet started.
 
-- **프로젝트 명:** `rJMX-Exporter` (Rust-based JMX Exporter)
-- **한 줄 요약:** Java 애플리케이션의 리소스 간섭을 최소화하기 위해 Rust로 재작성한 초경량 고성능 JMX 메트릭 수집기 및 Prometheus Exporter.
-- **배경:** 기존 Java 기반 `jmx_exporter`는 대상 앱의 JVM 힙 메모리를 공유하여 OOM 리스크를 높이고 GC 부하를 유발함. 이를 Rust 사이드카 구조로 변경하여 인프라 효율성을 극대화함.
+## 1. Overview
 
-## 2. 목표 및 핵심 가치 (Goals & Value)
+**Project:** rJMX-Exporter (Rust-based JMX Exporter)
 
-- **Resource Efficiency:** JVM 없이 실행되어 메모리 사용량 90% 이상 절감 (예: 50MB -> 5MB 미만).
-- **Zero Interference:** 대상 애플리케이션의 GC 및 런타임 성능에 영향을 주지 않음.
-- **High Performance:** Rust의 비동기 I/O(`Tokio`)를 활용하여 수천 개의 메트릭 파싱 및 서빙 지연 시간(Latency) 최소화.
+**Summary:** A Rust-based sidecar that collects JMX metrics from JVM applications and exports them in Prometheus format.
 
-## 3. 기술 스택 (Tech Stack)
+**Problem:** The official [jmx_exporter](https://github.com/prometheus/jmx_exporter) has two modes, both with drawbacks:
 
-| Category | Technology |
-|----------|------------|
-| Language | Rust (Edition 2021) |
-| Async Runtime | `Tokio` |
-| HTTP Server | `Axum` (Prometheus 엔드포인트 서빙) |
-| HTTP Client | `Reqwest` (JMX 데이터 수집) |
-| Serialization | `Serde`, `Serde_yaml` (설정 파일 로드) |
-| Observability | `Prometheus` crate, `Tracing` (로깅) |
-| Target Interface | Jolokia (JMX-over-HTTP) |
+| Mode | How it works | Issues |
+|------|--------------|--------|
+| javaagent | Runs inside target JVM | Shares heap/GC, can cause OOM, adds latency |
+| HTTP server | Separate JVM process | ~50MB+ memory, requires JVM management |
 
-## 4. 시스템 아키텍처 (Architecture)
+**Solution:** rJMX-Exporter runs as a native Rust binary, collecting metrics via Jolokia (JMX-over-HTTP). This provides complete isolation from the target application with minimal resource usage.
+
+## 2. Goals
+
+| Metric | Target | Notes |
+|--------|--------|-------|
+| Memory Usage | <10MB | 80%+ reduction vs Java standalone |
+| Startup Time | <100ms | |
+| Scrape Latency | <10ms | Collection to response |
+| Impact on Target | 0% | Isolated process |
+
+## 3. Non-Goals (v1)
+
+- No in-process JVM agent mode (sidecar only)
+- No direct JMX/RMI collection (Jolokia required)
+- No auto-discovery (explicit targets config)
+- Metrics-only HTTP endpoint (no UI)
+
+## 4. Architecture
 
 ```
 ┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
-│   Java App      │     │  rJMX-Exporter  │     │   Prometheus    │
-│  (Spring Boot)  │     │     (Rust)      │     │                 │
-│                 │     │                 │     │                 │
-│  ┌───────────┐  │     │  ┌───────────┐  │     │                 │
-│  │  Jolokia  │◄─┼─────┼──┤ Collector │  │     │                 │
-│  │  Agent    │  │JSON │  └─────┬─────┘  │     │                 │
-│  └───────────┘  │     │        │        │     │                 │
-│                 │     │  ┌─────▼─────┐  │     │                 │
-│                 │     │  │Transformer│  │     │                 │
-│                 │     │  └─────┬─────┘  │     │                 │
-│                 │     │        │        │     │                 │
-│                 │     │  ┌─────▼─────┐  │GET  │                 │
-│                 │     │  │  /metrics │◄─┼─────┤  Scraper        │
-│                 │     │  └───────────┘  │     │                 │
+│    JVM App      │     │  rJMX-Exporter  │     │   Prometheus    │
+│                 │     │     (Rust)      │     │                 │
+│  ┌───────────┐  │     │                 │     │                 │
+│  │  Jolokia  │◄─┼─────┤  Collector      │     │                 │
+│  │  Agent    │  │JSON │       ↓         │     │                 │
+│  └───────────┘  │     │  Transformer    │     │                 │
+│                 │     │       ↓         │     │                 │
+│                 │     │  /metrics  ◄────┼─────┤  Scraper        │
 └─────────────────┘     └─────────────────┘     └─────────────────┘
 ```
 
-### 컴포넌트 설명
+### Components
 
-1. **Java App:** 메트릭을 노출하는 대상 (Spring Boot 등).
-2. **JMX Bridge (Jolokia):** Java 앱 내부에 위치하며 JMX를 HTTP/JSON으로 변환.
-3. **rJMX-Exporter (Rust):**
-   - **Collector:** 주기적으로 Jolokia에서 JSON 데이터를 Fetch.
-   - **Transformer:** 기존 `jmx_exporter`의 YAML 규칙을 해석하여 Prometheus 포맷으로 변환.
-   - **Registry:** 변환된 데이터를 메모리에 캐싱.
-4. **Prometheus:** `rJMX-Exporter`가 열어둔 포트(`/metrics`)에서 데이터를 스크래핑.
+| Component | Role |
+|-----------|------|
+| Collector | Fetches JSON metrics from Jolokia endpoint |
+| Transformer | Converts MBean data → Prometheus format |
+| Server | Serves `/metrics` endpoint |
 
-## 5. 단계별 구현 계획 (Roadmap)
+### Prerequisites
 
-### Phase 1: 기초 환경 구축
-- [ ] Docker를 활용한 샘플 Java 앱 및 Prometheus 환경 구성
-- [ ] Rust 프로젝트 초기 설정 및 `Tokio`/`Axum` 서버 베이스라인 구축
+- **Jolokia**: Must be installed on the JVM app as a JVM agent or WAR
+- **Prometheus**: Configured to scrape rJMX-Exporter's `/metrics` endpoint
+- **Network access**: Exporter must reach the Jolokia endpoint (auth/TLS handling TBD)
 
-### Phase 2: 데이터 수집 및 파싱
-- [ ] Jolokia 엔드포인트로부터 JSON 메트릭 수집 로직 구현
-- [ ] `Serde`를 이용한 동적 데이터 구조 매핑
+## 5. Tech Stack
 
-### Phase 3: 매핑 엔진(Rule Engine) 구현
-- [ ] 기존 Java JMX Exporter의 YAML 설정 형식을 지원하는 매핑 로직 작성
-- [ ] Regex 기반 메트릭 이름 변환
+| Category | Technology | Purpose |
+|----------|------------|---------|
+| Language | Rust 2021 | |
+| Async Runtime | Tokio | Async I/O |
+| HTTP Server | Axum | `/metrics` endpoint |
+| HTTP Client | Reqwest | Jolokia data collection |
+| Serialization | Serde, serde_yaml | Config files, JSON parsing |
+| Logging | tracing | Structured logging |
 
-### Phase 4: 성능 검증
-- [ ] Java 버전 vs Rust 버전의 리소스 점유율 비교 벤치마크 수행
-- [ ] 메모리 사용량 및 응답 지연 시간 측정
+## 6. Configuration (Planned)
 
-## 6. 레포지토리 구조 (Repository Structure)
+```yaml
+jolokia:
+  url: "http://localhost:8778/jolokia"
+  # username: "user"    # optional
+  # password: "pass"    # optional
+  # timeout_ms: 5000    # optional
+
+server:
+  port: 9090
+  path: "/metrics"
+
+rules:
+  - pattern: "java.lang<type=Memory><HeapMemoryUsage>(\\w+)"
+    name: "jvm_memory_heap_$1_bytes"
+    type: gauge
+```
+
+### jmx_exporter Compatibility
+
+**Design Principle:** Existing jmx_exporter config files should work with minimal changes (add `jolokia:` block only).
+
+#### Supported Options (Planned)
+
+| Option | Priority | Notes |
+|--------|----------|-------|
+| `rules[].pattern` | P0 | MBean regex matching |
+| `rules[].name` | P0 | Prometheus metric name with `$1`, `$2` capture groups |
+| `rules[].type` | P0 | `gauge`, `counter`, `untyped` |
+| `rules[].labels` | P0 | Static and dynamic (`$1`) labels |
+| `rules[].help` | P1 | Metric help text |
+| `whitelistObjectNames` | P1 | MBean filter (glob patterns) |
+| `blacklistObjectNames` | P1 | MBean exclusion filter |
+| `lowercaseOutputName` | P2 | Lowercase metric names |
+| `lowercaseOutputLabelNames` | P2 | Lowercase label names |
+| `rules[].value` | P2 | Custom value expression |
+| `rules[].valueFactor` | P2 | Multiply value (e.g., ms→s) |
+
+#### Not Planned (v1)
+
+| Option | Reason |
+|--------|--------|
+| `hostPort` | Use `jolokia.url` instead |
+| `jmxUrl` | Jolokia only, no direct RMI |
+| `ssl` / `sslConfig` | Use `jolokia.url` with https |
+| `rules[].attrNameSnakeCase` | Low demand, easy workaround |
+
+#### Migration Example
+
+```yaml
+# Before (jmx_exporter standalone)
+hostPort: localhost:9999
+
+# After (rJMX-Exporter)
+jolokia:
+  url: "http://localhost:8778/jolokia"
+
+# Rest of config unchanged
+lowercaseOutputName: true
+rules:
+  - pattern: "..."
+```
+
+## 7. Operational Considerations (Planned)
+
+- Jolokia request timeouts/retries and overall scrape deadlines
+- Partial scrape behavior and exporter self-metrics (errors, durations)
+- Label cardinality guardrails and rule allowlists
+- Optional caching vs live fetch tradeoffs
+
+## 8. Migration Tools (Planned)
+
+### Config Validator
+```bash
+# Validate existing jmx_exporter config
+rjmx-exporter validate -c config.yaml
+
+# Output:
+# ✓ rules[0].pattern - supported
+# ✓ rules[0].name - supported
+# ⚠ rules[2].attrNameSnakeCase - not supported (ignored)
+# ✗ hostPort - use jolokia.url instead
+```
+
+### Dry Run Mode
+```bash
+# Test config without starting server
+rjmx-exporter --dry-run -c config.yaml
+
+# Shows:
+# - Parsed rules
+# - Sample metric output
+# - Warnings for unsupported options
+```
+
+## 9. Open Questions
+
+- Should config reload be supported (SIGHUP / hot reload)?
+- Should multi-target mode be first-class or strictly sidecar?
+- Which Jolokia auth modes should be supported (basic auth, bearer, TLS)?
+- How should complex JMX types/arrays be mapped into Prometheus metrics?
+- Should we support jmx_exporter `includeObjectNames` as alias for `whitelistObjectNames`?
+
+## 10. Roadmap
+
+### Phase 1: Foundation
+- [ ] Create Rust project structure (Cargo.toml, src/)
+- [ ] Basic Tokio + Axum server
+- [ ] Sample Java app + Jolokia Docker environment
+
+### Phase 2: Data Collection
+- [ ] Parse Jolokia JSON responses
+- [ ] Define MBean data structures
+
+### Phase 3: Transform Engine
+- [ ] YAML rule parser
+- [ ] Regex-based metric name transformation
+- [ ] Prometheus text format output
+
+### Phase 4: Validation
+- [ ] Benchmark resource usage vs Java version
+- [ ] Integration tests
+
+## 11. Repository Structure (Planned)
 
 ```
 rJMX-Exporter/
-├── Cargo.toml           # Rust 프로젝트 설정
-├── README.md            # 프로젝트 소개
-├── docs/
-│   └── 1-PAGER.md       # 프로젝트 1-Pager (본 문서)
+├── Cargo.toml
 ├── src/
-│   ├── main.rs          # 엔트리 포인트
-│   ├── collector.rs     # JMX 데이터 수집 로직
-│   ├── transformer.rs   # 메트릭 변환 엔진 (핵심)
-│   ├── config.rs        # YAML 설정 파서
-│   └── server.rs        # Prometheus HTTP 서버
-├── tests/               # 성능 테스트 및 유닛 테스트
-└── example/             # 샘플 Java 앱 및 Docker-compose
+│   ├── main.rs
+│   ├── lib.rs
+│   ├── config.rs
+│   ├── error.rs
+│   ├── collector/
+│   │   ├── mod.rs
+│   │   ├── client.rs
+│   │   └── parser.rs
+│   ├── transformer/
+│   │   ├── mod.rs
+│   │   └── rules.rs
+│   └── server/
+│       ├── mod.rs
+│       └── handlers.rs
+├── tests/
+├── examples/
+│   └── docker-compose.yaml
+└── docs/
+    ├── 1-PAGER.md
+    └── TECH-STACK.md
 ```
 
-## 7. 성공 지표 (Success Metrics)
+## 12. References
 
-| Metric | Target |
-|--------|--------|
-| 메모리 사용량 | < 10MB (vs Java 50MB+) |
-| 시작 시간 | < 100ms |
-| 메트릭 수집 지연 | < 10ms per scrape |
-| CPU 사용률 | < 1% idle |
-
-## 8. 참고 자료 (References)
-
-- [Prometheus JMX Exporter (Java)](https://github.com/prometheus/jmx_exporter)
-- [Jolokia - JMX-HTTP Bridge](https://jolokia.org/)
-- [Tokio - Rust Async Runtime](https://tokio.rs/)
-- [Axum - Web Framework](https://github.com/tokio-rs/axum)
-
----
-
-**Repository:** https://github.com/jsoonworld/rJMX-Exporter
+- [jmx_exporter (Java)](https://github.com/prometheus/jmx_exporter)
+- [Jolokia](https://jolokia.org/)
+- [Tokio](https://tokio.rs/)
+- [Axum](https://github.com/tokio-rs/axum)
