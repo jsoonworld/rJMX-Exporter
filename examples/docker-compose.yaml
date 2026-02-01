@@ -1,0 +1,49 @@
+# Docker Compose configuration for rJMX-Exporter development
+#
+# Usage:
+#   docker-compose up -d              # Start all services
+#   docker-compose logs -f java-app   # View Java app logs
+#   docker-compose down               # Stop all services
+
+version: "3.8"
+
+services:
+  # Java application with Jolokia agent
+  java-app:
+    build:
+      context: ../docker/java-app
+      dockerfile: Dockerfile
+    container_name: rjmx-java-app
+    ports:
+      - "8080:8080"   # Application port
+      - "8778:8778"   # Jolokia port
+    environment:
+      - JAVA_OPTS=-javaagent:/opt/jolokia/jolokia-jvm.jar=port=8778,host=0.0.0.0
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8778/jolokia/version"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - rjmx-network
+
+  # Prometheus for testing (optional)
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: rjmx-prometheus
+    ports:
+      - "9091:9090"
+    volumes:
+      - ../docker/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--web.enable-lifecycle"
+    networks:
+      - rjmx-network
+    depends_on:
+      - java-app
+
+networks:
+  rjmx-network:
+    driver: bridge
