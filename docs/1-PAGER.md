@@ -98,7 +98,7 @@ rJMX-Exporter/
 | 메모리 사용량 | < 10MB (vs Java 50MB+) |
 | 시작 시간 | < 100ms |
 | 메트릭 수집 지연 | < 10ms per scrape |
-| CPU 사용률 | < 1% idle |
+| CPU 사용률 | < 1% (유휴 시) |
 
 ## 8. 참고 자료 (References)
 
