@@ -28,6 +28,99 @@ pub enum AppError {
     /// Internal server error
     #[error("Internal error: {0}")]
     Internal(String),
+
+    /// Collector error
+    #[error("Collector error: {0}")]
+    Collector(#[from] CollectorError),
+}
+
+/// Collector 모듈 에러 타입
+#[derive(Error, Debug)]
+pub enum CollectorError {
+    /// HTTP 클라이언트 초기화 실패
+    #[error("Failed to initialize HTTP client: {0}")]
+    HttpClientInit(#[source] reqwest::Error),
+
+    /// HTTP 요청 실패
+    #[error("HTTP request failed: {0}")]
+    HttpRequest(#[source] reqwest::Error),
+
+    /// HTTP 응답 읽기 실패
+    #[error("Failed to read HTTP response: {0}")]
+    HttpResponse(#[source] reqwest::Error),
+
+    /// HTTP 상태 코드 에러
+    #[error("HTTP error status: {0}")]
+    HttpStatus(u16),
+
+    /// JSON 파싱 에러
+    #[error("JSON parse error: {0}")]
+    JsonParse(String),
+
+    /// Jolokia 에러 응답
+    #[error("Jolokia error (status {status}): {message}")]
+    JolokiaError { status: u16, message: String },
+
+    /// MBean을 찾을 수 없음
+    #[error("MBean not found: {0}")]
+    MBeanNotFound(String),
+
+    /// 잘못된 ObjectName
+    #[error("Invalid ObjectName: {0}")]
+    InvalidObjectName(String),
+
+    /// 타임아웃
+    #[error("Request timed out after {0}ms")]
+    Timeout(u64),
+
+    /// 연결 실패
+    #[error("Connection failed: {0}")]
+    ConnectionFailed(String),
+
+    /// 최대 재시도 초과
+    #[error("Maximum retries exceeded")]
+    MaxRetriesExceeded,
+
+    /// 인증 실패
+    #[error("Authentication failed")]
+    AuthenticationFailed,
+}
+
+impl CollectorError {
+    /// 재시도 가능한 에러인지 확인
+    pub fn is_retryable(&self) -> bool {
+        matches!(
+            self,
+            CollectorError::HttpRequest(_)
+                | CollectorError::HttpResponse(_)
+                | CollectorError::Timeout(_)
+                | CollectorError::ConnectionFailed(_)
+                | CollectorError::HttpStatus(500..=599)
+        )
+    }
+
+    /// HTTP 상태 코드 추출
+    pub fn http_status(&self) -> Option<u16> {
+        match self {
+            CollectorError::HttpStatus(code) => Some(*code),
+            CollectorError::JolokiaError { status, .. } => Some(*status),
+            _ => None,
+        }
+    }
+}
+
+impl From<reqwest::Error> for CollectorError {
+    fn from(err: reqwest::Error) -> Self {
+        if err.is_timeout() {
+            CollectorError::Timeout(5000)
+        } else if err.is_connect() {
+            CollectorError::ConnectionFailed(err.to_string())
+        } else if err.is_request() {
+            CollectorError::HttpRequest(err)
+        } else {
+            CollectorError::HttpResponse(err)
+        }
+    }
 }
 
 impl IntoResponse for AppError {
@@ -38,6 +131,7 @@ impl IntoResponse for AppError {
             AppError::Jolokia(e) => (StatusCode::BAD_GATEWAY, e),
             AppError::Transform(e) => (StatusCode::INTERNAL_SERVER_ERROR, e),
             AppError::Internal(e) => (StatusCode::INTERNAL_SERVER_ERROR, e),
+            AppError::Collector(e) => (StatusCode::BAD_GATEWAY, e.to_string()),
         };
 
         tracing::error!(status = %status, error = %message, "Request failed");
