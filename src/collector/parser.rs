@@ -177,7 +177,12 @@ fn parse_mbean_value(value: Value) -> CollectResult<MBeanValue> {
     match value {
         Value::Null => Ok(MBeanValue::Null),
         Value::Bool(b) => Ok(MBeanValue::Boolean(b)),
-        Value::Number(n) => Ok(MBeanValue::Number(n.as_f64().unwrap_or(0.0))),
+        Value::Number(n) => {
+            let f = n.as_f64().ok_or_else(|| {
+                CollectorError::JsonParse(format!("Number {} cannot be represented as f64", n))
+            })?;
+            Ok(MBeanValue::Number(f))
+        }
         Value::String(s) => Ok(MBeanValue::String(s)),
         Value::Array(arr) => {
             let parsed: Vec<AttributeValue> = arr
@@ -224,7 +229,9 @@ fn parse_attribute_value(value: Value) -> CollectResult<AttributeValue> {
             if let Some(i) = n.as_i64() {
                 Ok(AttributeValue::Integer(i))
             } else {
-                Ok(AttributeValue::Float(n.as_f64().unwrap_or(0.0)))
+                Ok(AttributeValue::Float(n.as_f64().ok_or_else(|| {
+                    CollectorError::JsonParse(format!("Number {} cannot be represented as f64", n))
+                })?))
             }
         }
         Value::String(s) => Ok(AttributeValue::String(s)),
@@ -331,13 +338,16 @@ impl ObjectName {
     }
 
     /// Prometheus 라벨용 문자열 생성
+    ///
+    /// Properties are sorted alphabetically by key to ensure deterministic output.
     pub fn to_label_string(&self) -> String {
-        let props: Vec<String> = self
-            .properties
+        let mut props: Vec<(&String, &String)> = self.properties.iter().collect();
+        props.sort_by_key(|(k, _)| *k);
+        let prop_strs: Vec<String> = props
             .iter()
             .map(|(k, v)| format!("{}=\"{}\"", k, v))
             .collect();
-        format!("{}:{}", self.domain, props.join(","))
+        format!("{}:{}", self.domain, prop_strs.join(","))
     }
 }
 

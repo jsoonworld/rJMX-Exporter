@@ -22,7 +22,7 @@ pub struct HealthResponse {
 }
 
 /// Root endpoint - displays basic info
-pub async fn root() -> Html<String> {
+pub async fn root(State(state): State<AppState>) -> Html<String> {
     let html = format!(
         r#"<!DOCTYPE html>
 <html>
@@ -34,11 +34,12 @@ pub async fn root() -> Html<String> {
     <p>Version: {}</p>
     <ul>
         <li><a href="/health">Health Check</a></li>
-        <li><a href="/metrics">Metrics</a></li>
+        <li><a href="{}">Metrics</a></li>
     </ul>
 </body>
 </html>"#,
-        env!("CARGO_PKG_VERSION")
+        env!("CARGO_PKG_VERSION"),
+        state.config.server.path
     );
     Html(html)
 }

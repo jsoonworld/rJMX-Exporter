@@ -210,6 +210,11 @@ impl JolokiaClient {
 
         let response = req.send().await.map_err(CollectorError::HttpRequest)?;
 
+        let status = response.status();
+        if !status.is_success() {
+            return Err(CollectorError::HttpStatus(status.as_u16()));
+        }
+
         let body = response
             .text()
             .await
@@ -246,43 +251,69 @@ impl JolokiaClient {
 
         for attempt in 0..=config.max_retries {
             match self.read_mbean(mbean, attributes).await {
-                Ok(result) => return Ok(result),
+                Ok(response) => {
+                    // Check if Jolokia returned a retryable error status
+                    if response.status == 200 {
+                        return Ok(response);
+                    }
+
+                    // Treat certain Jolokia status codes as retryable (5xx errors)
+                    if Self::is_jolokia_status_retryable(response.status) {
+                        let error = CollectorError::JolokiaError {
+                            status: response.status,
+                            message: response
+                                .error
+                                .unwrap_or_else(|| "Unknown Jolokia error".to_string()),
+                        };
+                        last_error = Some(error);
+                    } else {
+                        // Non-retryable Jolokia error, return response as-is
+                        return Ok(response);
+                    }
+                }
                 Err(e) => {
                     if !e.is_retryable() {
                         return Err(e);
                     }
 
                     last_error = Some(e);
-
-                    if attempt < config.max_retries {
-                        warn!(
-                            attempt = attempt + 1,
-                            max = config.max_retries,
-                            delay_ms = delay.as_millis() as u64,
-                            "Request failed, retrying"
-                        );
-                        tokio::time::sleep(delay).await;
-                        delay = std::cmp::min(
-                            Duration::from_secs_f64(delay.as_secs_f64() * config.multiplier),
-                            config.max_delay,
-                        );
-                    }
                 }
+            }
+
+            if attempt < config.max_retries {
+                warn!(
+                    attempt = attempt + 1,
+                    max = config.max_retries,
+                    delay_ms = delay.as_millis() as u64,
+                    "Request failed, retrying"
+                );
+                tokio::time::sleep(delay).await;
+                delay = std::cmp::min(
+                    Duration::from_secs_f64(delay.as_secs_f64() * config.multiplier),
+                    config.max_delay,
+                );
             }
         }
 
         Err(last_error.unwrap_or(CollectorError::MaxRetriesExceeded))
     }
 
+    /// Check if a Jolokia internal status code is retryable
+    fn is_jolokia_status_retryable(status: u16) -> bool {
+        // 5xx status codes are retryable (e.g., 503 service unavailable)
+        (500..600).contains(&status)
+    }
+
     /// Fallback이 있는 수집 - 부분 실패 허용
     pub async fn collect_with_fallback(
         &self,
         mbeans: &[String],
+        attributes: Option<&[String]>,
     ) -> Vec<(String, CollectResult<JolokiaResponse>)> {
         let mut results = Vec::new();
 
         for mbean in mbeans {
-            let result = self.read_mbean(mbean, None).await;
+            let result = self.read_mbean(mbean, attributes).await;
 
             match &result {
                 Ok(response) if response.status == 200 => {

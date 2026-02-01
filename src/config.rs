@@ -165,15 +165,21 @@ impl Config {
     pub fn load_or_default<P: AsRef<Path>>(path: P) -> Result<Self, ConfigError> {
         let path = path.as_ref();
 
-        if !path.exists() {
-            tracing::warn!(
-                path = %path.display(),
-                "Config file not found, using defaults"
-            );
-            return Ok(Self::default());
+        match std::fs::read_to_string(path) {
+            Ok(contents) => {
+                let config: Config = serde_yaml::from_str(&contents)?;
+                config.validate()?;
+                Ok(config)
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                tracing::warn!(
+                    path = %path.display(),
+                    "Config file not found, using defaults"
+                );
+                Ok(Self::default())
+            }
+            Err(e) => Err(ConfigError::ReadError(e)),
         }
-
-        Self::load(path)
     }
 
     /// Validate the configuration

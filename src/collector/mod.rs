@@ -56,7 +56,9 @@ impl Collector {
 
     /// 설정된 MBean들 수집
     pub async fn collect(&self) -> Vec<(String, CollectResult<JolokiaResponse>)> {
-        self.client.collect_with_fallback(&self.config.mbeans).await
+        self.client
+            .collect_with_fallback(&self.config.mbeans, self.config.attributes.as_deref())
+            .await
     }
 
     /// Bulk 수집 (단일 HTTP 요청)
