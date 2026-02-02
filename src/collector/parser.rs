@@ -318,20 +318,40 @@ impl ObjectName {
     ///
     /// # Limitations
     /// - Quoted keys/values are NOT fully supported
+    ///
+    /// # Errors
+    /// Returns `InvalidObjectName` if:
+    /// - Missing domain/properties separator (':')
+    /// - Any property segment is not in key=value format
+    /// - No properties are defined
     pub fn parse(s: &str) -> CollectResult<Self> {
         let parts: Vec<&str> = s.splitn(2, ':').collect();
         if parts.len() != 2 {
             return Err(CollectorError::InvalidObjectName(s.to_string()));
         }
 
-        let domain = parts[0].to_string();
+        let domain = parts[0].trim().to_string();
+        if domain.is_empty() {
+            return Err(CollectorError::InvalidObjectName(s.to_string()));
+        }
+
         let mut properties = HashMap::new();
 
         for prop in parts[1].split(',') {
             let kv: Vec<&str> = prop.splitn(2, '=').collect();
-            if kv.len() == 2 {
-                properties.insert(kv[0].to_string(), kv[1].to_string());
+            if kv.len() != 2 {
+                return Err(CollectorError::InvalidObjectName(s.to_string()));
             }
+            let key = kv[0].trim();
+            let value = kv[1].trim();
+            if key.is_empty() {
+                return Err(CollectorError::InvalidObjectName(s.to_string()));
+            }
+            properties.insert(key.to_string(), value.to_string());
+        }
+
+        if properties.is_empty() {
+            return Err(CollectorError::InvalidObjectName(s.to_string()));
         }
 
         Ok(Self { domain, properties })
@@ -501,6 +521,32 @@ mod tests {
 
         let name2 = ObjectName::parse("java.lang:type=GarbageCollector,name=G1").unwrap();
         assert_eq!(name2.properties.get("name"), Some(&"G1".to_string()));
+    }
+
+    #[test]
+    fn test_object_name_parse_invalid() {
+        // Missing colon separator
+        assert!(ObjectName::parse("java.lang").is_err());
+
+        // Empty domain
+        assert!(ObjectName::parse(":type=Memory").is_err());
+
+        // Missing property value (no equals sign)
+        assert!(ObjectName::parse("java.lang:type").is_err());
+
+        // Empty key
+        assert!(ObjectName::parse("java.lang:=Memory").is_err());
+
+        // Empty properties section
+        assert!(ObjectName::parse("java.lang:").is_err());
+    }
+
+    #[test]
+    fn test_object_name_parse_with_whitespace() {
+        // Whitespace should be trimmed
+        let name = ObjectName::parse(" java.lang : type = Memory ").unwrap();
+        assert_eq!(name.domain, "java.lang");
+        assert_eq!(name.properties.get("type"), Some(&"Memory".to_string()));
     }
 
     #[test]

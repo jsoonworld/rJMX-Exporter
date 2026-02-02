@@ -70,8 +70,9 @@ pub enum CollectorError {
     InvalidObjectName(String),
 
     /// 타임아웃
-    #[error("Request timed out after {0}ms")]
-    Timeout(u64),
+    /// The value is the configured timeout in milliseconds, if known.
+    #[error("Request timed out{}", .0.map(|ms| format!(" after {}ms", ms)).unwrap_or_default())]
+    Timeout(Option<u64>),
 
     /// 연결 실패
     #[error("Connection failed: {0}")]
@@ -93,7 +94,7 @@ impl CollectorError {
             self,
             CollectorError::HttpRequest(_)
                 | CollectorError::HttpResponse(_)
-                | CollectorError::Timeout(_)
+                | CollectorError::Timeout(..)
                 | CollectorError::ConnectionFailed(_)
                 | CollectorError::HttpStatus(500..=599)
         )
@@ -112,7 +113,10 @@ impl CollectorError {
 impl From<reqwest::Error> for CollectorError {
     fn from(err: reqwest::Error) -> Self {
         if err.is_timeout() {
-            CollectorError::Timeout(5000)
+            // Timeout value is unknown when converting from reqwest::Error
+            // because reqwest API doesn't expose the configured timeout duration.
+            // Use CollectorError::timeout_with_duration() when the duration is known.
+            CollectorError::Timeout(None)
         } else if err.is_connect() {
             CollectorError::ConnectionFailed(err.to_string())
         } else if err.is_request() {
@@ -120,6 +124,13 @@ impl From<reqwest::Error> for CollectorError {
         } else {
             CollectorError::HttpResponse(err)
         }
+    }
+}
+
+impl CollectorError {
+    /// Create a Timeout error with known duration
+    pub fn timeout_with_duration(ms: u64) -> Self {
+        CollectorError::Timeout(Some(ms))
     }
 }
 
