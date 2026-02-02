@@ -104,11 +104,13 @@ impl JolokiaClient {
         let request = JolokiaRequest {
             request_type: "read".to_string(),
             mbean: mbean.to_string(),
-            attribute: attributes.map(|attrs| {
-                if attrs.len() == 1 {
-                    AttributeSpec::Single(attrs[0].clone())
+            attribute: attributes.and_then(|attrs| {
+                if attrs.is_empty() {
+                    None // Empty slice means "all attributes" - don't send attribute field
+                } else if attrs.len() == 1 {
+                    Some(AttributeSpec::Single(attrs[0].clone()))
                 } else {
-                    AttributeSpec::Multiple(attrs.to_vec())
+                    Some(AttributeSpec::Multiple(attrs.to_vec()))
                 }
             }),
         };
@@ -151,11 +153,13 @@ impl JolokiaClient {
             .map(|(mbean, attrs)| JolokiaRequest {
                 request_type: "read".to_string(),
                 mbean: mbean.to_string(),
-                attribute: attrs.map(|a| {
-                    if a.len() == 1 {
-                        AttributeSpec::Single(a[0].clone())
+                attribute: attrs.and_then(|a| {
+                    if a.is_empty() {
+                        None // Empty slice means "all attributes" - don't send attribute field
+                    } else if a.len() == 1 {
+                        Some(AttributeSpec::Single(a[0].clone()))
                     } else {
-                        AttributeSpec::Multiple(a.to_vec())
+                        Some(AttributeSpec::Multiple(a.to_vec()))
                     }
                 }),
             })
@@ -288,8 +292,14 @@ impl JolokiaClient {
                     "Request failed, retrying"
                 );
                 tokio::time::sleep(delay).await;
+                // Safe multiplier: clamp to valid range to prevent panic
+                let safe_multiplier = if config.multiplier.is_finite() && config.multiplier > 0.0 {
+                    config.multiplier
+                } else {
+                    2.0 // fallback to default
+                };
                 delay = std::cmp::min(
-                    Duration::from_secs_f64(delay.as_secs_f64() * config.multiplier),
+                    Duration::from_secs_f64(delay.as_secs_f64() * safe_multiplier),
                     config.max_delay,
                 );
             }
@@ -366,5 +376,58 @@ mod tests {
         let config = RetryConfig::default();
         assert_eq!(config.max_retries, 3);
         assert_eq!(config.initial_delay, Duration::from_millis(100));
+    }
+
+    #[test]
+    fn test_empty_attributes_serialization() {
+        // Empty attributes should serialize to None (no attribute field)
+        let request = JolokiaRequest {
+            request_type: "read".to_string(),
+            mbean: "java.lang:type=Memory".to_string(),
+            attribute: Some(&[] as &[String]).and_then(|attrs| {
+                if attrs.is_empty() {
+                    None
+                } else if attrs.len() == 1 {
+                    Some(AttributeSpec::Single(attrs[0].clone()))
+                } else {
+                    Some(AttributeSpec::Multiple(attrs.to_vec()))
+                }
+            }),
+        };
+
+        let json = serde_json::to_string(&request).unwrap();
+        // Empty slice should result in no "attribute" field
+        assert!(!json.contains("attribute"));
+    }
+
+    #[test]
+    fn test_single_attribute_serialization() {
+        let attrs = vec!["HeapMemoryUsage".to_string()];
+        let request = JolokiaRequest {
+            request_type: "read".to_string(),
+            mbean: "java.lang:type=Memory".to_string(),
+            attribute: Some(AttributeSpec::Single(attrs[0].clone())),
+        };
+
+        let json = serde_json::to_string(&request).unwrap();
+        assert!(json.contains("\"attribute\":\"HeapMemoryUsage\""));
+    }
+
+    #[test]
+    fn test_multiple_attributes_serialization() {
+        let attrs = vec![
+            "HeapMemoryUsage".to_string(),
+            "NonHeapMemoryUsage".to_string(),
+        ];
+        let request = JolokiaRequest {
+            request_type: "read".to_string(),
+            mbean: "java.lang:type=Memory".to_string(),
+            attribute: Some(AttributeSpec::Multiple(attrs)),
+        };
+
+        let json = serde_json::to_string(&request).unwrap();
+        assert!(json.contains("\"attribute\":["));
+        assert!(json.contains("HeapMemoryUsage"));
+        assert!(json.contains("NonHeapMemoryUsage"));
     }
 }

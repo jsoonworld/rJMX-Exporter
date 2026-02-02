@@ -340,14 +340,31 @@ impl ObjectName {
     /// Prometheus 라벨용 문자열 생성
     ///
     /// Properties are sorted alphabetically by key to ensure deterministic output.
+    /// Label values are escaped according to Prometheus text format rules.
     pub fn to_label_string(&self) -> String {
         let mut props: Vec<(&String, &String)> = self.properties.iter().collect();
         props.sort_by_key(|(k, _)| *k);
         let prop_strs: Vec<String> = props
             .iter()
-            .map(|(k, v)| format!("{}=\"{}\"", k, v))
+            .map(|(k, v)| format!("{}=\"{}\"", k, Self::escape_label_value(v)))
             .collect();
         format!("{}:{}", self.domain, prop_strs.join(","))
+    }
+
+    /// Escape a label value for Prometheus text format
+    ///
+    /// Prometheus requires escaping of: backslash (\), double-quote ("), and newline (\n)
+    fn escape_label_value(s: &str) -> String {
+        let mut result = String::with_capacity(s.len());
+        for c in s.chars() {
+            match c {
+                '\\' => result.push_str("\\\\"),
+                '"' => result.push_str("\\\""),
+                '\n' => result.push_str("\\n"),
+                _ => result.push(c),
+            }
+        }
+        result
     }
 }
 
@@ -499,5 +516,44 @@ mod tests {
 
         let flattened = value.flatten_numbers();
         assert_eq!(flattened.len(), 2);
+    }
+
+    #[test]
+    fn test_label_escaping() {
+        // Test escaping of backslash
+        assert_eq!(ObjectName::escape_label_value("a\\b"), "a\\\\b");
+
+        // Test escaping of double-quote
+        assert_eq!(ObjectName::escape_label_value("a\"b"), "a\\\"b");
+
+        // Test escaping of newline
+        assert_eq!(ObjectName::escape_label_value("a\nb"), "a\\nb");
+
+        // Test combined escaping
+        assert_eq!(
+            ObjectName::escape_label_value("path\\to\\\"file\"\nend"),
+            "path\\\\to\\\\\\\"file\\\"\\nend"
+        );
+
+        // Test no escaping needed
+        assert_eq!(
+            ObjectName::escape_label_value("normal_value"),
+            "normal_value"
+        );
+    }
+
+    #[test]
+    fn test_to_label_string_with_special_chars() {
+        let name = ObjectName {
+            domain: "java.lang".to_string(),
+            properties: HashMap::from([
+                ("type".to_string(), "GarbageCollector".to_string()),
+                ("name".to_string(), "G1 \"Young\" Gen".to_string()),
+            ]),
+        };
+
+        let label_str = name.to_label_string();
+        // Should escape the double quotes in "Young"
+        assert!(label_str.contains("name=\"G1 \\\"Young\\\" Gen\""));
     }
 }
