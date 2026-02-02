@@ -1,6 +1,6 @@
 # rJMX-Exporter Design Document
 
-> **Status: Phase 1 Foundation implemented (as of 2026-02-01)** - Phase 2 design in progress.
+> **Status: Phase 3 Transform Engine implemented (as of 2026-02-02)** - Phase 4 (Validation) next.
 
 ## 1. Overview
 

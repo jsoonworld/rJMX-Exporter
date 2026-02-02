@@ -125,7 +125,7 @@ jvm_memory_heap_used_bytes{area="heap",metric="used"} 1.23456789e+08
 | Possessive | `++`, `*+` | N/A | 경고 + 일반 수량자로 변환 |
 | Atomic groups | `(?>...)` | N/A | 에러 반환 |
 | Unicode classes | `\p{javaLowerCase}` | `\p{Ll}` | 매핑 테이블 |
-| Lookbehind (가변) | `(?<=.*)` | N/A | 에러 반환 |
+| Lookaround 어써션 | `(?<=...)`, `(?<!...)`, `(?=...)`, `(?!...)` | N/A | 에러 반환 |
 
 #### 자동 변환 규칙
 

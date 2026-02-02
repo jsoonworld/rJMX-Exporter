@@ -6,6 +6,50 @@ use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use thiserror::Error;
 
+/// Rule 파싱 및 regex 관련 에러
+#[derive(Error, Debug)]
+pub enum RuleError {
+    /// 정규식 패턴 컴파일 실패
+    #[error("Invalid regex pattern '{pattern}': {source}")]
+    InvalidPattern {
+        pattern: String,
+        #[source]
+        source: regex::Error,
+    },
+
+    /// 지원되지 않는 regex 문법
+    #[error("Unsupported regex syntax in pattern '{pattern}': {feature}")]
+    UnsupportedSyntax { pattern: String, feature: String },
+
+    /// 규칙 컴파일 실패 (인덱스 포함)
+    #[error("Failed to compile rule at index {index}: {source}")]
+    RuleCompileFailed {
+        index: usize,
+        #[source]
+        source: Box<RuleError>,
+    },
+}
+
+/// Transform 엔진 에러
+#[derive(Error, Debug)]
+pub enum TransformError {
+    /// 규칙 에러
+    #[error("Rule error: {0}")]
+    Rule(#[from] RuleError),
+
+    /// 유효하지 않은 메트릭명
+    #[error("Invalid metric name '{name}': {reason}")]
+    InvalidMetricName { name: String, reason: String },
+
+    /// 유효하지 않은 라벨명
+    #[error("Invalid label name '{name}': {reason}")]
+    InvalidLabelName { name: String, reason: String },
+
+    /// 캡처 그룹 누락
+    #[error("Missing capture group ${group} in pattern")]
+    MissingCaptureGroup { group: usize },
+}
+
 /// Application error type
 #[derive(Error, Debug)]
 pub enum AppError {
@@ -23,7 +67,7 @@ pub enum AppError {
 
     /// Metric transformation error
     #[error("Transform error: {0}")]
-    Transform(String),
+    Transform(#[from] TransformError),
 
     /// Internal server error
     #[error("Internal error: {0}")]
@@ -144,7 +188,11 @@ impl IntoResponse for AppError {
             ),
             AppError::HttpClient(e) => (StatusCode::BAD_GATEWAY, "Upstream error", e),
             AppError::Jolokia(e) => (StatusCode::BAD_GATEWAY, "Upstream error", e),
-            AppError::Transform(e) => (StatusCode::INTERNAL_SERVER_ERROR, "Transform error", e),
+            AppError::Transform(e) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Transform error",
+                e.to_string(),
+            ),
             AppError::Internal(e) => (StatusCode::INTERNAL_SERVER_ERROR, "Internal error", e),
             AppError::Collector(e) => (StatusCode::BAD_GATEWAY, "Collector error", e.to_string()),
         };

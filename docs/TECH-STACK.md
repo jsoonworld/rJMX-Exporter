@@ -75,7 +75,7 @@
 | Aspect | Detail |
 |--------|--------|
 | Crate | `reqwest` |
-| Version | 0.12.x |
+| Version | 0.11.x |
 | Features | `json`, `rustls-tls` |
 
 **Why Reqwest?**
@@ -299,8 +299,8 @@ predicates = "3.0"
 | `lowercaseOutputLabelNames` | Supported | |
 | `whitelistObjectNames` | Supported | MBean filter |
 | `blacklistObjectNames` | Supported | MBean exclusion |
-| `rules[].value` | Planned (P2) | Custom value expression |
-| `rules[].valueFactor` | Planned (P2) | Value multiplier |
+| `rules[].value` | Detected (warns) | Custom value expression |
+| `rules[].valueFactor` | Supported | Value multiplier |
 | `hostPort` | Not supported | Use `jolokia.url` |
 | `jmxUrl` | Not supported | Jolokia only |
 | `ssl` / `sslConfig` | Not supported | Use HTTPS in URL |

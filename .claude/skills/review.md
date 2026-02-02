@@ -43,7 +43,7 @@ Review current changes or specified files.
 
 ## Output Format
 
-```
+```text
 ## File: src/example.rs
 
 ### Critical

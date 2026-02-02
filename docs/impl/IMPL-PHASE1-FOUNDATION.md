@@ -319,6 +319,7 @@ pub fn init_logging(level: &str) -> Result<()> {
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 use thiserror::Error;
+use tracing;
 
 /// Configuration errors
 #[derive(Error, Debug)]
@@ -1268,4 +1269,6 @@ ab -n 1000 -c 10 http://localhost:9090/health
 
 ---
 
-*문서 끝*
+---
+
+## 문서 끝

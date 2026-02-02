@@ -6,12 +6,13 @@ import java.lang.management.ManagementFactory;
 import java.lang.management.MemoryMXBean;
 import java.lang.management.ThreadMXBean;
 import java.util.Random;
+import java.util.concurrent.atomic.AtomicLong;
 import com.sun.net.httpserver.HttpServer;
 import java.net.InetSocketAddress;
 
 public class App {
     private static final Random random = new Random();
-    private static volatile long requestCount = 0;
+    private static final AtomicLong requestCount = new AtomicLong(0);
 
     public static void main(String[] args) throws Exception {
         System.out.println("Starting sample Java application...");
@@ -21,8 +22,8 @@ public class App {
         HttpServer server = HttpServer.create(new InetSocketAddress(8080), 0);
 
         server.createContext("/", exchange -> {
-            requestCount++;
-            String response = "Hello from Java! Request #" + requestCount;
+            long count = requestCount.incrementAndGet();
+            String response = "Hello from Java! Request #" + count;
             exchange.sendResponseHeaders(200, response.length());
             exchange.getResponseBody().write(response.getBytes());
             exchange.close();

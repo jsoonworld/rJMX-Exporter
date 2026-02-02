@@ -1,6 +1,6 @@
 # rJMX-Exporter
 
-> **Status: Phase 1 Foundation implemented (as of 2026-02-01)** - Phase 2 design in progress.
+> **Status: In Development** - Phase 3 (Transform Engine) completed. See [Implementation Progress](docs/impl/IMPL-PHASE3-TRANSFORMER.md).
 
 A high-performance JMX Metric Exporter for Prometheus, written in Rust.
 
