@@ -1,0 +1,144 @@
+# CI Workflow for rJMX-Exporter
+# Runs tests, linting, and integration tests on every push and PR
+
+name: CI
+
+on:
+  push:
+    branches: [main, develop, "feature/*"]
+  pull_request:
+    branches: [main, develop]
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  # Test job: cargo test, clippy, fmt check
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Cache cargo registry
+        uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+
+      - name: Check formatting
+        run: cargo fmt -- --check
+
+      - name: Run clippy
+        run: cargo clippy --all-targets --all-features -- -D warnings
+
+      - name: Run tests
+        run: cargo test --all-features --verbose
+
+      - name: Run doc tests
+        run: cargo test --doc
+
+  # Integration test job: Docker-based tests
+  integration-test:
+    name: Integration Test
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build rJMX-Exporter image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: false
+          load: true
+          tags: rjmx-exporter:test
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Start test environment
+        run: |
+          docker compose -f docker-compose.yaml up -d java-app
+
+          # Wait for Java app with Jolokia to be healthy
+          echo "Waiting for Java app to be ready..."
+          for i in {1..30}; do
+            if curl -sf http://localhost:8778/jolokia/version > /dev/null 2>&1; then
+              echo "Java app is ready!"
+              break
+            fi
+            echo "Attempt $i/30: Java app not ready yet..."
+            sleep 2
+          done
+
+      - name: Run integration tests
+        run: |
+          # Start rJMX-Exporter container
+          docker run -d --name rjmx-test \
+            --network host \
+            -v $(pwd)/config.example.yaml:/config.yaml:ro \
+            rjmx-exporter:test -c /config.yaml
+
+          # Wait for server to start
+          sleep 3
+
+          # Test metrics endpoint
+          echo "Testing /metrics endpoint..."
+          curl -sf http://localhost:9090/metrics || exit 1
+
+          # Test health endpoint
+          echo "Testing /health endpoint..."
+          curl -sf http://localhost:9090/health || exit 1
+
+          echo "Integration tests passed!"
+
+      - name: Collect logs on failure
+        if: failure()
+        run: |
+          echo "=== rJMX-Exporter logs ==="
+          docker logs rjmx-test 2>&1 || true
+          echo "=== Java app logs ==="
+          docker compose -f docker-compose.yaml logs java-app 2>&1 || true
+
+      - name: Cleanup
+        if: always()
+        run: |
+          docker rm -f rjmx-test 2>/dev/null || true
+          docker compose -f docker-compose.yaml down -v 2>/dev/null || true
+
+  # Benchmark job: compile benchmarks (no run in CI)
+  benchmark:
+    name: Benchmark
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo registry
+        uses: Swatinem/rust-cache@v2
+
+      - name: Compile benchmarks
+        run: cargo bench --no-run
+
+      - name: Check release build
+        run: cargo build --release
+
+      - name: Report binary size
+        run: |
+          echo "=== Release Binary Info ==="
+          ls -lh target/release/rjmx-exporter
+          file target/release/rjmx-exporter

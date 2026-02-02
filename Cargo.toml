@@ -49,9 +49,22 @@ assert_cmd = "2.0"
 predicates = "3.0"
 wiremock = "0.5"
 criterion = "0.5"
+tempfile = "3.10"
 
 [[bench]]
 name = "collector_bench"
+harness = false
+
+[[bench]]
+name = "memory_bench"
+harness = false
+
+[[bench]]
+name = "startup_bench"
+harness = false
+
+[[bench]]
+name = "scrape_latency_bench"
 harness = false
 
 [profile.release]

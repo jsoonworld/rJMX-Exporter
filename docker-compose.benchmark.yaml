@@ -1,0 +1,152 @@
+# docker-compose.benchmark.yaml
+#
+# Benchmark environment for comparing jmx_exporter vs rJMX-Exporter
+#
+# Usage:
+#   docker-compose -f docker-compose.benchmark.yaml up -d
+#   docker-compose -f docker-compose.benchmark.yaml logs -f
+#   docker-compose -f docker-compose.benchmark.yaml down
+#
+# After services are running:
+#   - Java app: http://localhost:8080 (app), http://localhost:8778 (Jolokia)
+#   - jmx_exporter: http://localhost:9091/metrics
+#   - rjmx-exporter: http://localhost:9090/metrics
+#
+# Run benchmark:
+#   ./scripts/benchmark.sh
+
+version: '3.8'
+
+services:
+  # ===========================================
+  # Java Application with Jolokia
+  # ===========================================
+  java-app:
+    build:
+      context: ./benchmark/java-app
+      dockerfile: Dockerfile
+    container_name: benchmark-java-app
+    ports:
+      - "8080:8080"   # Application HTTP
+      - "8778:8778"   # Jolokia JMX-over-HTTP
+    environment:
+      - MEMORY_MB=50
+      - WORKER_THREADS=5
+      - JAVA_OPTS=-javaagent:/opt/jolokia/jolokia-jvm.jar=port=8778,host=0.0.0.0
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 512M
+        reservations:
+          cpus: '0.5'
+          memory: 256M
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8778/jolokia/version"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - benchmark-network
+
+  # ===========================================
+  # Original Java jmx_exporter (for comparison)
+  # ===========================================
+  jmx-exporter:
+    image: bitnami/jmx-exporter:0.20.0
+    container_name: benchmark-jmx-exporter
+    ports:
+      - "9091:9091"
+    environment:
+      - JMX_EXPORTER_HTTP_PORT=9091
+    volumes:
+      - ./benchmark/jmx-exporter-config.yaml:/opt/bitnami/jmx-exporter/config.yaml:ro
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 128M
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9091/metrics"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    depends_on:
+      java-app:
+        condition: service_healthy
+    networks:
+      - benchmark-network
+
+  # ===========================================
+  # rJMX-Exporter (Rust version)
+  # ===========================================
+  rjmx-exporter:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: benchmark-rjmx-exporter
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./benchmark/config.yaml:/config.yaml:ro
+    command: ["/usr/local/bin/rjmx-exporter", "-c", "/config.yaml"]
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 512M
+        reservations:
+          cpus: '0.1'
+          memory: 16M
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:9090/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+    depends_on:
+      java-app:
+        condition: service_healthy
+    networks:
+      - benchmark-network
+
+  # ===========================================
+  # Prometheus (optional, for metrics storage)
+  # ===========================================
+  prometheus:
+    image: prom/prometheus:v2.48.0
+    container_name: benchmark-prometheus
+    ports:
+      - "9092:9090"
+    volumes:
+      - ./benchmark/prometheus.yaml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--web.enable-lifecycle"
+      - "--storage.tsdb.retention.time=1h"
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+    depends_on:
+      - jmx-exporter
+      - rjmx-exporter
+    networks:
+      - benchmark-network
+    profiles:
+      - monitoring
+
+networks:
+  benchmark-network:
+    driver: bridge
+
+volumes:
+  prometheus-data:
