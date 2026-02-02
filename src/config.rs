@@ -36,6 +36,22 @@ pub struct Config {
     /// Metric transformation rules
     #[serde(default)]
     pub rules: Vec<Rule>,
+
+    /// Convert metric names to lowercase (jmx_exporter compatible)
+    #[serde(rename = "lowercaseOutputName", default)]
+    pub lowercase_output_name: bool,
+
+    /// Convert label names to lowercase (jmx_exporter compatible)
+    #[serde(rename = "lowercaseOutputLabelNames", default)]
+    pub lowercase_output_label_names: bool,
+
+    /// MBean whitelist patterns (glob patterns, jmx_exporter compatible)
+    #[serde(rename = "whitelistObjectNames", default)]
+    pub whitelist_object_names: Vec<String>,
+
+    /// MBean blacklist patterns (glob patterns, jmx_exporter compatible)
+    #[serde(rename = "blacklistObjectNames", default)]
+    pub blacklist_object_names: Vec<String>,
 }
 
 /// Jolokia endpoint configuration
@@ -79,22 +95,31 @@ pub struct ServerConfig {
 /// Metric transformation rule
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Rule {
-    /// MBean pattern to match
+    /// MBean pattern to match (regex)
     pub pattern: String,
 
-    /// Prometheus metric name (supports $1, $2, etc.)
+    /// Prometheus metric name (supports $1, $2, etc. for capture groups)
     pub name: String,
 
     /// Metric type (gauge, counter, untyped)
     #[serde(default = "default_metric_type")]
     pub r#type: String,
 
-    /// Optional help text
+    /// Optional help text for the metric
     pub help: Option<String>,
 
-    /// Optional static labels
+    /// Optional static labels to add to the metric
     #[serde(default)]
     pub labels: std::collections::HashMap<String, String>,
+
+    /// Value extraction expression (jmx_exporter compatible)
+    /// Supports attribute references like "$1" for capture groups
+    pub value: Option<String>,
+
+    /// Value multiplication factor (jmx_exporter compatible)
+    /// The extracted value will be multiplied by this factor
+    #[serde(rename = "valueFactor", default)]
+    pub value_factor: Option<f64>,
 }
 
 // Default value functions
@@ -204,8 +229,26 @@ impl Config {
             ));
         }
 
+        // Validate rule patterns are valid regex
+        for (idx, rule) in self.rules.iter().enumerate() {
+            // Basic regex validation - full validation happens in transformer
+            if rule.pattern.is_empty() {
+                return Err(ConfigError::ValidationError(format!(
+                    "Rule {} has empty pattern",
+                    idx
+                )));
+            }
+        }
+
         Ok(())
     }
+
+    // Convert config rules to transformer RuleSet
+    //
+    // Note: Requires transformer module - implement when transformer is complete
+    // pub fn to_ruleset(&self) -> crate::transformer::RuleSet {
+    //     todo!("Implement when transformer module is complete")
+    // }
 
     /// Validate the final port value
     ///
@@ -243,5 +286,47 @@ mod tests {
         assert!(Config::validate_port(0).is_err());
         assert!(Config::validate_port(8080).is_ok());
         assert!(Config::validate_port(9090).is_ok());
+    }
+
+    #[test]
+    fn test_rule_pattern_validation() {
+        let mut config = Config::default();
+        config.rules.push(Rule {
+            pattern: String::new(),
+            name: "test_metric".to_string(),
+            r#type: "gauge".to_string(),
+            help: None,
+            labels: std::collections::HashMap::new(),
+            value: None,
+            value_factor: None,
+        });
+        assert!(config.validate().is_err());
+    }
+
+    #[test]
+    fn test_jmx_exporter_compat_fields() {
+        let yaml = r#"
+lowercaseOutputName: true
+lowercaseOutputLabelNames: true
+whitelistObjectNames:
+  - "java.lang:*"
+  - "com.example:*"
+blacklistObjectNames:
+  - "java.lang:type=MemoryPool,*"
+rules:
+  - pattern: "java.lang<type=Memory><HeapMemoryUsage>(\\w+)"
+    name: "jvm_memory_heap_$1_bytes"
+    type: gauge
+    value: "$1"
+    valueFactor: 1.0
+"#;
+        let config: Config = serde_yaml::from_str(yaml).unwrap();
+        assert!(config.lowercase_output_name);
+        assert!(config.lowercase_output_label_names);
+        assert_eq!(config.whitelist_object_names.len(), 2);
+        assert_eq!(config.blacklist_object_names.len(), 1);
+        assert_eq!(config.rules.len(), 1);
+        assert_eq!(config.rules[0].value, Some("$1".to_string()));
+        assert_eq!(config.rules[0].value_factor, Some(1.0));
     }
 }

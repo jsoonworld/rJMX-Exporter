@@ -1498,6 +1498,7 @@ dependencies = [
  "criterion",
  "once_cell",
  "predicates",
+ "regex",
  "reqwest",
  "serde",
  "serde_json",
