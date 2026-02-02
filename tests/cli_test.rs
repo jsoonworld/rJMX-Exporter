@@ -14,6 +14,7 @@ use std::io::Write;
 use tempfile::NamedTempFile;
 
 /// Get a command for the rjmx-exporter binary
+#[allow(deprecated)]
 fn cmd() -> Command {
     Command::cargo_bin("rjmx-exporter").expect("Failed to find rjmx-exporter binary")
 }

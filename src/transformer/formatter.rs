@@ -313,8 +313,8 @@ mod tests {
 
     #[test]
     fn test_format_value_decimal() {
-        let formatted = PrometheusFormatter::format_value(3.14159);
-        assert!(formatted.starts_with("3.14"));
+        let formatted = PrometheusFormatter::format_value(1.23456);
+        assert!(formatted.starts_with("1.23"));
     }
 
     #[test]

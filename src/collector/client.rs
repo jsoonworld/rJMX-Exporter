@@ -402,7 +402,7 @@ mod tests {
 
     #[test]
     fn test_single_attribute_serialization() {
-        let attrs = vec!["HeapMemoryUsage".to_string()];
+        let attrs = ["HeapMemoryUsage".to_string()];
         let request = JolokiaRequest {
             request_type: "read".to_string(),
             mbean: "java.lang:type=Memory".to_string(),

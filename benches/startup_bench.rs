@@ -60,7 +60,7 @@ fn bench_regex_compile(c: &mut Criterion) {
     fn create_rules(count: usize) -> Vec<Rule> {
         (0..count)
             .map(|i| {
-                Rule::builder(&format!(
+                Rule::builder(format!(
                     r"com\.example<type=Service{},name=(\w+)><(\w+)>",
                     i
                 ))
@@ -92,7 +92,7 @@ fn bench_engine_init(c: &mut Criterion) {
     fn create_ruleset(count: usize) -> RuleSet {
         let rules: Vec<Rule> = (0..count)
             .map(|i| {
-                Rule::builder(&format!(
+                Rule::builder(format!(
                     r"com\.example<type=Service{},name=(\w+)><(\w+)>",
                     i
                 ))
