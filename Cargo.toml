@@ -46,6 +46,12 @@ tokio-test = "0.4"
 reqwest = { version = "0.11", default-features = false, features = ["json", "rustls-tls"] }
 assert_cmd = "2.0"
 predicates = "3.0"
+wiremock = "0.5"
+criterion = "0.5"
+
+[[bench]]
+name = "collector_bench"
+harness = false
 
 [profile.release]
 lto = true

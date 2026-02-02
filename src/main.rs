@@ -41,13 +41,10 @@ async fn main() -> Result<()> {
 
     // Load configuration
     let config = Config::load_or_default(&args.config)?;
-    let port = match args.port {
-        Some(0) => {
-            return Err(anyhow::anyhow!("CLI port must be greater than 0"));
-        }
-        Some(p) => p,
-        None => config.server.port,
-    };
+
+    // Apply CLI port override, then validate the final port value
+    let port = args.port.unwrap_or(config.server.port);
+    Config::validate_port(port)?;
 
     // Start server
     server::run(config, port).await?;

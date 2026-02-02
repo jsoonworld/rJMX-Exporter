@@ -47,9 +47,14 @@ pub async fn run(config: Config, port: u16) -> Result<()> {
         .with_state(state);
 
     // Parse bind address from config
-    let bind_addr: std::net::IpAddr = bind_address
-        .parse()
-        .map_err(|e| anyhow::anyhow!("Invalid bind_address '{}': {}", bind_address, e))?;
+    // Handle "localhost" specially, otherwise parse as IP address
+    let bind_addr: std::net::IpAddr = if bind_address == "localhost" {
+        std::net::IpAddr::V4(std::net::Ipv4Addr::LOCALHOST)
+    } else {
+        bind_address
+            .parse()
+            .map_err(|e| anyhow::anyhow!("Invalid bind_address '{}': {}. Use an IP address (e.g., '0.0.0.0', '127.0.0.1') or 'localhost'.", bind_address, e))?
+    };
     let addr = SocketAddr::from((bind_addr, port));
     info!(address = %addr, metrics_path = %metrics_path, "Server listening");
 

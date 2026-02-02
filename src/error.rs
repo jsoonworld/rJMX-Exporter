@@ -28,6 +28,110 @@ pub enum AppError {
     /// Internal server error
     #[error("Internal error: {0}")]
     Internal(String),
+
+    /// Collector error
+    #[error("Collector error: {0}")]
+    Collector(#[from] CollectorError),
+}
+
+/// Collector 모듈 에러 타입
+#[derive(Error, Debug)]
+pub enum CollectorError {
+    /// HTTP 클라이언트 초기화 실패
+    #[error("Failed to initialize HTTP client: {0}")]
+    HttpClientInit(#[source] reqwest::Error),
+
+    /// HTTP 요청 실패
+    #[error("HTTP request failed: {0}")]
+    HttpRequest(#[source] reqwest::Error),
+
+    /// HTTP 응답 읽기 실패
+    #[error("Failed to read HTTP response: {0}")]
+    HttpResponse(#[source] reqwest::Error),
+
+    /// HTTP 상태 코드 에러
+    #[error("HTTP error status: {0}")]
+    HttpStatus(u16),
+
+    /// JSON 파싱 에러
+    #[error("JSON parse error: {0}")]
+    JsonParse(String),
+
+    /// Jolokia 에러 응답
+    #[error("Jolokia error (status {status}): {message}")]
+    JolokiaError { status: u16, message: String },
+
+    /// MBean을 찾을 수 없음
+    #[error("MBean not found: {0}")]
+    MBeanNotFound(String),
+
+    /// 잘못된 ObjectName
+    #[error("Invalid ObjectName: {0}")]
+    InvalidObjectName(String),
+
+    /// 타임아웃
+    /// The value is the configured timeout in milliseconds, if known.
+    #[error("Request timed out{}", .0.map(|ms| format!(" after {}ms", ms)).unwrap_or_default())]
+    Timeout(Option<u64>),
+
+    /// 연결 실패
+    #[error("Connection failed: {0}")]
+    ConnectionFailed(String),
+
+    /// 최대 재시도 초과
+    #[error("Maximum retries exceeded")]
+    MaxRetriesExceeded,
+
+    /// 인증 실패
+    #[error("Authentication failed")]
+    AuthenticationFailed,
+}
+
+impl CollectorError {
+    /// 재시도 가능한 에러인지 확인
+    pub fn is_retryable(&self) -> bool {
+        matches!(
+            self,
+            CollectorError::HttpRequest(_)
+                | CollectorError::HttpResponse(_)
+                | CollectorError::Timeout(..)
+                | CollectorError::ConnectionFailed(_)
+                | CollectorError::HttpStatus(500..=599)
+        )
+    }
+
+    /// HTTP 상태 코드 추출
+    pub fn http_status(&self) -> Option<u16> {
+        match self {
+            CollectorError::HttpStatus(code) => Some(*code),
+            CollectorError::JolokiaError { status, .. } => Some(*status),
+            _ => None,
+        }
+    }
+}
+
+impl From<reqwest::Error> for CollectorError {
+    fn from(err: reqwest::Error) -> Self {
+        if err.is_timeout() {
+            // Timeout value is unknown when converting from reqwest::Error
+            // because reqwest API doesn't expose the configured timeout duration.
+            // Use CollectorError::timeout_with_duration() when the duration is known.
+            CollectorError::Timeout(None)
+        } else if err.is_connect() {
+            CollectorError::ConnectionFailed(err.to_string())
+        } else if err.is_request() {
+            CollectorError::HttpRequest(err)
+        } else {
+            CollectorError::HttpResponse(err)
+        }
+    }
+}
+
+impl CollectorError {
+    /// Create a Timeout error with known duration
+    pub fn timeout_with_duration(ms: u64) -> Self {
+        CollectorError::Timeout(Some(ms))
+    }
 }
 
 impl IntoResponse for AppError {
@@ -42,6 +146,7 @@ impl IntoResponse for AppError {
             AppError::Jolokia(e) => (StatusCode::BAD_GATEWAY, "Upstream error", e),
             AppError::Transform(e) => (StatusCode::INTERNAL_SERVER_ERROR, "Transform error", e),
             AppError::Internal(e) => (StatusCode::INTERNAL_SERVER_ERROR, "Internal error", e),
+            AppError::Collector(e) => (StatusCode::BAD_GATEWAY, "Collector error", e.to_string()),
         };
 
         tracing::error!(status = %status, error = %log_message, "Request failed");

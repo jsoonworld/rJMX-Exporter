@@ -67,7 +67,11 @@ pub struct ServerConfig {
     #[serde(default = "default_metrics_path")]
     pub path: String,
 
-    /// Server bind address
+    /// Server bind address (IP address or "localhost")
+    ///
+    /// Supported values:
+    /// - IP addresses: "0.0.0.0", "127.0.0.1", "::1", etc.
+    /// - "localhost" (maps to 127.0.0.1)
     #[serde(default = "default_bind_address")]
     pub bind_address: String,
 }
@@ -165,25 +169,29 @@ impl Config {
     pub fn load_or_default<P: AsRef<Path>>(path: P) -> Result<Self, ConfigError> {
         let path = path.as_ref();
 
-        if !path.exists() {
-            tracing::warn!(
-                path = %path.display(),
-                "Config file not found, using defaults"
-            );
-            return Ok(Self::default());
+        match std::fs::read_to_string(path) {
+            Ok(contents) => {
+                let config: Config = serde_yaml::from_str(&contents)?;
+                config.validate()?;
+                Ok(config)
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                tracing::warn!(
+                    path = %path.display(),
+                    "Config file not found, using defaults"
+                );
+                Ok(Self::default())
+            }
+            Err(e) => Err(ConfigError::ReadError(e)),
         }
-
-        Self::load(path)
     }
 
     /// Validate the configuration
+    ///
+    /// Note: Port validation is intentionally NOT done here because CLI arguments
+    /// may override the port value. Port validation should be done after all
+    /// overrides are applied (see main.rs).
     fn validate(&self) -> Result<(), ConfigError> {
-        if self.server.port == 0 {
-            return Err(ConfigError::ValidationError(
-                "Server port must be greater than 0".to_string(),
-            ));
-        }
-
         if !self.server.path.starts_with('/') {
             return Err(ConfigError::ValidationError(
                 "Metrics path must start with '/'".to_string(),
@@ -196,6 +204,18 @@ impl Config {
             ));
         }
 
+        Ok(())
+    }
+
+    /// Validate the final port value
+    ///
+    /// Call this after applying CLI overrides to ensure the port is valid.
+    pub fn validate_port(port: u16) -> Result<(), ConfigError> {
+        if port == 0 {
+            return Err(ConfigError::ValidationError(
+                "Server port must be greater than 0".to_string(),
+            ));
+        }
         Ok(())
     }
 }
@@ -212,9 +232,16 @@ mod tests {
     }
 
     #[test]
-    fn test_config_validation() {
+    fn test_config_validation_path() {
         let mut config = Config::default();
-        config.server.port = 0;
+        config.server.path = "no-slash".to_string();
         assert!(config.validate().is_err());
+    }
+
+    #[test]
+    fn test_port_validation() {
+        assert!(Config::validate_port(0).is_err());
+        assert!(Config::validate_port(8080).is_ok());
+        assert!(Config::validate_port(9090).is_ok());
     }
 }
