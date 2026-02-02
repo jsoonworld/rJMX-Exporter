@@ -18,18 +18,18 @@ server:
 # Metric transformation rules
 rules:
   # JVM Memory metrics
-  - pattern: "java.lang<type=Memory><HeapMemoryUsage>(\\w+)"
+  - pattern: 'java.lang<type=Memory><HeapMemoryUsage>(\w+)'
     name: "jvm_memory_heap_$1_bytes"
     type: gauge
     help: "JVM heap memory usage"
 
-  - pattern: "java.lang<type=Memory><NonHeapMemoryUsage>(\\w+)"
+  - pattern: 'java.lang<type=Memory><NonHeapMemoryUsage>(\w+)'
     name: "jvm_memory_nonheap_$1_bytes"
     type: gauge
     help: "JVM non-heap memory usage"
 
   # JVM Thread metrics
-  - pattern: "java.lang<type=Threading><(\\w+)>"
+  - pattern: 'java.lang<type=Threading><(\w+)>'
     name: "jvm_threads_$1"
     type: gauge
     help: "JVM thread metrics"
