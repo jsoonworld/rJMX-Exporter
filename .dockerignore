@@ -54,7 +54,8 @@ docker-compose*.yml
 # Testing
 # =============================================================================
 tests/
-benches/
+# Note: benches/ is NOT excluded because Cargo.toml references [[bench]] entries
+# and cargo will fail to parse the manifest without them
 *.test
 coverage/
 *.profraw

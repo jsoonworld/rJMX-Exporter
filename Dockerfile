@@ -33,6 +33,7 @@ RUN cargo build --release --target x86_64-unknown-linux-musl && \
 
 # Copy actual source code
 COPY src ./src
+COPY benches ./benches
 
 # Build the actual binary
 RUN cargo build --release --target x86_64-unknown-linux-musl && \
