@@ -34,14 +34,18 @@ RUN mkdir -p src benches && \
 
 # Build dependencies (this layer is cached)
 RUN cargo build --release --target x86_64-unknown-linux-musl && \
-    rm -rf src benches target/x86_64-unknown-linux-musl/release/deps/rjmx*
+    rm -rf src benches && \
+    rm -rf target/x86_64-unknown-linux-musl/release/deps/rjmx* && \
+    rm -rf target/x86_64-unknown-linux-musl/release/deps/librjmx* && \
+    rm -rf target/x86_64-unknown-linux-musl/release/.fingerprint/rjmx*
 
 # Copy actual source code
 COPY src ./src
 COPY benches ./benches
 
-# Build the actual binary
-RUN cargo build --release --target x86_64-unknown-linux-musl && \
+# Build the actual binary (touch files to ensure cache invalidation)
+RUN touch src/lib.rs src/main.rs && \
+    cargo build --release --target x86_64-unknown-linux-musl && \
     strip target/x86_64-unknown-linux-musl/release/rjmx-exporter
 
 # =============================================================================
