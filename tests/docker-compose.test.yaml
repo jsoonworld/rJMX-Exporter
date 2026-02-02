@@ -1,0 +1,149 @@
+# Docker Compose configuration for integration testing
+#
+# This file sets up a complete test environment with:
+# - A Java application with Jolokia agent
+# - The rJMX-Exporter service
+# - A test runner to verify metrics
+#
+# Usage:
+#   docker-compose -f tests/docker-compose.test.yaml up --build --abort-on-container-exit
+#
+# Or use the convenience script:
+#   ./scripts/test-docker.sh
+
+version: '3.8'
+
+services:
+  # Test Java application with Jolokia agent
+  java-app:
+    build:
+      context: ./fixtures
+      dockerfile: Dockerfile.java-app
+    ports:
+      - "8778:8778"
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8778/jolokia/version"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+    networks:
+      - test-network
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 512M
+
+  # rJMX-Exporter service
+  rjmx-exporter:
+    build:
+      context: ../
+      dockerfile: Dockerfile
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./fixtures/config.yaml:/config.yaml:ro
+    command: ["-c", "/config.yaml"]
+    depends_on:
+      java-app:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:9090/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - test-network
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 64M
+
+  # Test runner - executes integration tests
+  test-runner:
+    image: curlimages/curl:latest
+    depends_on:
+      rjmx-exporter:
+        condition: service_healthy
+    networks:
+      - test-network
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        echo "=== Starting Integration Tests ==="
+
+        # Test 1: Health endpoint
+        echo "Test 1: Health endpoint..."
+        if curl -sf http://rjmx-exporter:9090/health | grep -q "healthy"; then
+          echo "  PASS: Health endpoint returns healthy"
+        else
+          echo "  FAIL: Health endpoint check failed"
+          exit 1
+        fi
+
+        # Test 2: Metrics endpoint returns 200
+        echo "Test 2: Metrics endpoint availability..."
+        HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://rjmx-exporter:9090/metrics)
+        if [ "$HTTP_CODE" = "200" ]; then
+          echo "  PASS: Metrics endpoint returns 200"
+        else
+          echo "  FAIL: Metrics endpoint returned $HTTP_CODE"
+          exit 1
+        fi
+
+        # Test 3: Metrics contain expected JVM metrics
+        echo "Test 3: JVM metrics presence..."
+        METRICS=$(curl -s http://rjmx-exporter:9090/metrics)
+
+        if echo "$METRICS" | grep -q "jvm_memory"; then
+          echo "  PASS: JVM memory metrics present"
+        else
+          echo "  FAIL: JVM memory metrics not found"
+          echo "  Received metrics:"
+          echo "$METRICS"
+          exit 1
+        fi
+
+        # Test 4: Prometheus format compliance
+        echo "Test 4: Prometheus format compliance..."
+        if echo "$METRICS" | grep -q "^# TYPE"; then
+          echo "  PASS: TYPE annotations present"
+        else
+          echo "  FAIL: TYPE annotations missing"
+          exit 1
+        fi
+
+        # Test 5: rjmx_exporter_info metric present
+        echo "Test 5: Exporter info metric..."
+        if echo "$METRICS" | grep -q "rjmx_exporter_info"; then
+          echo "  PASS: rjmx_exporter_info metric present"
+        else
+          echo "  WARN: rjmx_exporter_info metric not found (may be expected in Phase 1)"
+        fi
+
+        # Test 6: Root endpoint returns HTML
+        echo "Test 6: Root endpoint..."
+        if curl -sf http://rjmx-exporter:9090/ | grep -q "rJMX-Exporter"; then
+          echo "  PASS: Root endpoint returns expected HTML"
+        else
+          echo "  FAIL: Root endpoint check failed"
+          exit 1
+        fi
+
+        # Test 7: Jolokia connectivity (indirect via metrics)
+        echo "Test 7: Jolokia connectivity..."
+        # If we get memory metrics, Jolokia is working
+        if echo "$METRICS" | grep -q "heap\|memory"; then
+          echo "  PASS: Jolokia data being collected"
+        else
+          echo "  INFO: Jolokia data collection verification inconclusive"
+        fi
+
+        echo ""
+        echo "=== All Integration Tests Passed ==="
+
+networks:
+  test-network:
+    driver: bridge

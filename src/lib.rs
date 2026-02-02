@@ -3,6 +3,7 @@
 //! This crate provides the core functionality for collecting JMX metrics
 //! from Java applications via Jolokia and exporting them in Prometheus format.
 
+pub mod cli;
 pub mod collector;
 pub mod config;
 pub mod error;

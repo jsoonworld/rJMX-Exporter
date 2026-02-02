@@ -1,0 +1,37 @@
+# Test Java Application with Jolokia Agent
+#
+# This Dockerfile creates a minimal Java application that exposes
+# JMX metrics via Jolokia for integration testing.
+#
+# The application:
+# - Allocates some memory to generate memory metrics
+# - Runs indefinitely to allow metric collection
+# - Exposes Jolokia on port 8778
+
+FROM eclipse-temurin:17-jdk-alpine
+
+# Install curl for healthcheck
+RUN apk add --no-cache curl
+
+WORKDIR /app
+
+# Download Jolokia agent
+ADD https://repo1.maven.org/maven2/org/jolokia/jolokia-agent-jvm/2.0.2/jolokia-agent-jvm-2.0.2-javaagent.jar /app/jolokia-agent.jar
+
+# Copy and compile the test application
+COPY TestApp.java /app/
+RUN javac TestApp.java
+
+# Expose Jolokia port
+EXPOSE 8778
+
+# Run Java with Jolokia agent
+# Agent options:
+#   - port=8778: HTTP port for Jolokia
+#   - host=0.0.0.0: Listen on all interfaces
+#   - discoveryEnabled=false: Disable multicast discovery
+CMD ["java", \
+     "-javaagent:/app/jolokia-agent.jar=port=8778,host=0.0.0.0,discoveryEnabled=false", \
+     "-Xms64m", \
+     "-Xmx256m", \
+     "TestApp"]

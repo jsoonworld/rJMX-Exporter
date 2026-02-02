@@ -1,17 +1,24 @@
 # docker/prometheus/prometheus.yml
 #
 # Prometheus configuration for testing rJMX-Exporter
+#
+# This configuration is designed to work with docker-compose.yaml
+# where services are connected via the rjmx-network.
 
 global:
   scrape_interval: 15s
   evaluation_interval: 15s
 
 scrape_configs:
-  # Scrape rJMX-Exporter
+  # Scrape rJMX-Exporter metrics
   - job_name: "rjmx-exporter"
     static_configs:
-      - targets: ["host.docker.internal:9090"]
+      - targets: ["rjmx-exporter:9090"]
+        labels:
+          instance: "rjmx-exporter"
     metrics_path: /metrics
+    scrape_interval: 10s
+    scrape_timeout: 5s
 
   # Scrape Prometheus itself
   - job_name: "prometheus"
