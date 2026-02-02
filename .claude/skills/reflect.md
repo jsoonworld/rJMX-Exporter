@@ -50,7 +50,7 @@ Improve quality through self-evaluation after generating output.
 
 ## Usage Example
 
-```
+```text
 /reflect collector/client.rs
 ```
 

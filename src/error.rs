@@ -32,17 +32,21 @@ pub enum AppError {
 
 impl IntoResponse for AppError {
     fn into_response(self) -> Response {
-        let (status, message) = match self {
-            AppError::Config(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
-            AppError::HttpClient(e) => (StatusCode::BAD_GATEWAY, e),
-            AppError::Jolokia(e) => (StatusCode::BAD_GATEWAY, e),
-            AppError::Transform(e) => (StatusCode::INTERNAL_SERVER_ERROR, e),
-            AppError::Internal(e) => (StatusCode::INTERNAL_SERVER_ERROR, e),
+        let (status, public_message, log_message) = match self {
+            AppError::Config(e) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Configuration error",
+                e.to_string(),
+            ),
+            AppError::HttpClient(e) => (StatusCode::BAD_GATEWAY, "Upstream error", e),
+            AppError::Jolokia(e) => (StatusCode::BAD_GATEWAY, "Upstream error", e),
+            AppError::Transform(e) => (StatusCode::INTERNAL_SERVER_ERROR, "Transform error", e),
+            AppError::Internal(e) => (StatusCode::INTERNAL_SERVER_ERROR, "Internal error", e),
         };
 
-        tracing::error!(status = %status, error = %message, "Request failed");
+        tracing::error!(status = %status, error = %log_message, "Request failed");
 
-        (status, message).into_response()
+        (status, public_message).into_response()
     }
 }
 

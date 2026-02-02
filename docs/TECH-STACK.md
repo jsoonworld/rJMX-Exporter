@@ -236,52 +236,50 @@ Options:
 
 ## 4. Cargo.toml Preview
 
+> **Note:** This reflects the actual implementation. See `Cargo.toml` for the authoritative version.
+
 ```toml
 [package]
 name = "rjmx-exporter"
 version = "0.1.0"
 edition = "2021"
-rust-version = "1.75"
 
 [dependencies]
 # Async runtime
-tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "time", "signal"] }
+tokio = { version = "1.35", features = ["full"] }
 
-# HTTP
-axum = "0.7"
-reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+# HTTP server
+axum = { version = "0.7", features = ["macros"] }
 tower = "0.4"
-tower-http = { version = "0.5", features = ["timeout", "trace"] }
+tower-http = { version = "0.5", features = ["trace", "cors"] }
+
+# HTTP client (Phase 2)
+reqwest = { version = "0.11", default-features = false, features = ["json", "rustls-tls"] }
 
 # Serialization
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
 serde_yaml = "0.9"
-
-# Pattern matching
-regex = "1"
 
 # Logging
 tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 
 # Error handling
-thiserror = "1"
-anyhow = "1"
+thiserror = "1.0"
+anyhow = "1.0"
 
 # CLI
-clap = { version = "4", features = ["derive"] }
+clap = { version = "4.4", features = ["derive", "env"] }
+
+# Utilities
+once_cell = "1.19"
 
 [dev-dependencies]
 tokio-test = "0.4"
-wiremock = "0.6"
-assert_cmd = "2"
-criterion = "0.5"
-insta = { version = "1", features = ["yaml"] }
-
-[[bench]]
-name = "transform"
-harness = false
+reqwest = { version = "0.11", default-features = false, features = ["json", "rustls-tls"] }
+assert_cmd = "2.0"
+predicates = "3.0"
 ```
 
 ---

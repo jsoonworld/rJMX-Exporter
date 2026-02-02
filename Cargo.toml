@@ -5,7 +5,7 @@ edition = "2021"
 authors = ["rJMX-Exporter Team"]
 description = "High-performance JMX metrics exporter written in Rust"
 license = "MIT OR Apache-2.0"
-repository = "https://github.com/your-org/rJMX-Exporter"
+repository = "https://github.com/jsoonworld/rJMX-Exporter"
 keywords = ["jmx", "prometheus", "metrics", "monitoring", "jolokia"]
 categories = ["command-line-utilities", "development-tools"]
 

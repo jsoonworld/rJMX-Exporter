@@ -108,7 +108,7 @@ cargo doc --open
 
 ## Directory Structure
 
-```
+```text
 rJMX-Exporter/
 ├── Cargo.toml
 ├── CLAUDE.md              # This file
@@ -138,11 +138,11 @@ rJMX-Exporter/
 │   ├── error.rs
 │   ├── collector/
 │   │   ├── mod.rs
-│   │   ├── client.rs
-│   │   └── parser.rs
+│   │   ├── client.rs         # (planned)
+│   │   └── parser.rs         # (planned)
 │   ├── transformer/
 │   │   ├── mod.rs
-│   │   └── rules.rs
+│   │   └── rules.rs          # (planned)
 │   └── server/
 │       ├── mod.rs
 │       └── handlers.rs
@@ -210,10 +210,16 @@ For long-running tasks, use:
 
 ## Current Status
 
-**Status: Design Phase**
+**Status: Phase 1 Foundation implemented (as of 2026-02-01)**
 
-### Next Steps
+### Completed (Phase 1)
 
-1. [ ] Create Cargo.toml and basic project structure
-2. [ ] Implement Tokio + Axum basic server
-3. [ ] Set up Jolokia test environment (Docker)
+- [x] Create Cargo.toml and basic project structure
+- [x] Implement Tokio + Axum basic server
+- [x] Set up Jolokia test environment (Docker)
+
+### Next Steps (Phase 2)
+
+1. [ ] Implement Jolokia HTTP client
+2. [ ] Parse Jolokia JSON responses
+3. [ ] Define MBean data structures

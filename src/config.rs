@@ -190,6 +190,12 @@ impl Config {
             ));
         }
 
+        if self.server.path == "/" || self.server.path == "/health" {
+            return Err(ConfigError::ValidationError(
+                "Metrics path must not conflict with '/' or '/health'".to_string(),
+            ));
+        }
+
         Ok(())
     }
 }

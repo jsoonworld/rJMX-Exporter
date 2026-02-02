@@ -1,6 +1,6 @@
 # rJMX-Exporter Design Document
 
-> **Status: Design Phase** - Implementation not yet started.
+> **Status: Phase 1 Foundation implemented (as of 2026-02-01)** - Phase 2 design in progress.
 
 ## 1. Overview
 
@@ -35,7 +35,7 @@
 
 ## 4. Architecture
 
-```
+```text
 ┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
 │    JVM App      │     │  rJMX-Exporter  │     │   Prometheus    │
 │                 │     │     (Rust)      │     │                 │

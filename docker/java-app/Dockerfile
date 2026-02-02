@@ -13,7 +13,7 @@ WORKDIR /app
 # Download Jolokia agent
 ARG JOLOKIA_VERSION=1.7.2
 RUN mkdir -p /opt/jolokia && \
-    wget -q -O /opt/jolokia/jolokia-jvm.jar \
+    curl -fsSL -o /opt/jolokia/jolokia-jvm.jar \
     "https://repo1.maven.org/maven2/org/jolokia/jolokia-jvm/${JOLOKIA_VERSION}/jolokia-jvm-${JOLOKIA_VERSION}.jar"
 
 # Copy sample application

@@ -1069,7 +1069,7 @@ fn dry_run(config: &Config, cli: &Cli) -> anyhow::Result<()> {
 
 ### 7.2 사용 예제
 
-```markdown
+~~~markdown
 ## Quick Start
 
 ### 1. Install Jolokia on your Java app
@@ -1106,7 +1106,7 @@ rules:
 ```bash
 curl http://localhost:9090/metrics
 ```
-```
+~~~
 
 ### 7.3 jmx_exporter 마이그레이션 가이드
 

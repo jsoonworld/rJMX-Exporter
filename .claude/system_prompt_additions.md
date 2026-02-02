@@ -23,7 +23,7 @@ When performing complex tasks, follow this cycle:
 2. **Act**: Execute tools or write code
 3. **Observe**: Evaluate results, prepare for next step
 
-```
+```text
 [Reason] collector.rs doesn't exist, need to write Jolokia integration code
 [Act] Implement HTTP client using reqwest
 [Observe] Compilation successful, unit tests needed
