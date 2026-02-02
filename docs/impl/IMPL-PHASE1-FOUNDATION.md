@@ -319,6 +319,7 @@ pub fn init_logging(level: &str) -> Result<()> {
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 use thiserror::Error;
+use tracing;
 
 /// Configuration errors
 #[derive(Error, Debug)]
