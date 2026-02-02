@@ -22,14 +22,19 @@ WORKDIR /app
 # Copy manifests first for better layer caching
 COPY Cargo.toml Cargo.lock ./
 
-# Create dummy src to build dependencies
-RUN mkdir -p src && \
+# Create dummy src and benches to build dependencies
+# (Cargo.toml references [[bench]] entries that must exist for manifest parsing)
+RUN mkdir -p src benches && \
     echo 'fn main() { println!("Dummy"); }' > src/main.rs && \
-    echo '' > src/lib.rs
+    echo '' > src/lib.rs && \
+    echo 'fn main() {}' > benches/collector_bench.rs && \
+    echo 'fn main() {}' > benches/memory_bench.rs && \
+    echo 'fn main() {}' > benches/startup_bench.rs && \
+    echo 'fn main() {}' > benches/scrape_latency_bench.rs
 
 # Build dependencies (this layer is cached)
 RUN cargo build --release --target x86_64-unknown-linux-musl && \
-    rm -rf src target/x86_64-unknown-linux-musl/release/deps/rjmx*
+    rm -rf src benches target/x86_64-unknown-linux-musl/release/deps/rjmx*
 
 # Copy actual source code
 COPY src ./src
