@@ -71,7 +71,7 @@ After writing code, self-review:
 
 ### Module Structure
 
-```
+```text
 src/
 ├── main.rs          # Entry point, CLI
 ├── lib.rs           # Library root
@@ -91,7 +91,7 @@ src/
 
 ### Dependency Direction
 
-```
+```text
 main → config, server
 server → collector, transformer
 collector → config
@@ -259,7 +259,7 @@ Before marking code complete:
 
 ## Commit Message Format
 
-```
+```text
 <type>: <subject>
 
 <body>

@@ -45,7 +45,7 @@ However, it has architectural limitations:
 
 ## Architecture
 
-```
+```text
 ┌─────────────────┐      ┌─────────────────┐      ┌─────────────────┐
 │    JVM App      │      │  rJMX-Exporter  │      │   Prometheus    │
 │                 │      │     (Rust)      │      │                 │

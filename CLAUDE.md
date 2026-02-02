@@ -26,6 +26,60 @@ Java App (Jolokia) --HTTP/JSON--> rJMX-Exporter (Rust) --/metrics--> Prometheus
 
 ---
 
+## Contribution Guidelines
+
+### Language Policy
+
+**English Only** - This is an open-source project. All contributions must be in English:
+
+- Commit messages
+- Pull request titles and descriptions
+- Code comments
+- Documentation
+- Issue reports and discussions
+
+### Git Workflow
+
+```
+main (protected, production-ready)
+  └── develop (integration branch)
+        └── feature/* (feature branches)
+        └── fix/* (bug fix branches)
+        └── docs/* (documentation branches)
+```
+
+### Branch Strategy
+
+| Branch | Purpose | Merge Target |
+|--------|---------|--------------|
+| `main` | Production-ready code | - |
+| `develop` | Integration branch | `main` (release) |
+| `feature/*` | New features | `develop` |
+| `fix/*` | Bug fixes | `develop` |
+| `docs/*` | Documentation | `develop` |
+
+### Pull Request Rules
+
+1. **All PRs must target `develop` branch** (not `main`)
+2. PRs to `main` are only for releases from `develop`
+3. Require code review before merging
+4. All CI checks must pass
+
+### Commit Message Format
+
+```
+type: short description in English
+
+- Detail 1
+- Detail 2
+
+Co-Authored-By: Name <email>
+```
+
+Types: `feat`, `fix`, `docs`, `refactor`, `test`, `chore`
+
+---
+
 ## Agent Cognitive Architecture
 
 ### Available Patterns
