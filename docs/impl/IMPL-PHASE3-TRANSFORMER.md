@@ -10,10 +10,10 @@ Phase 3는 rJMX-Exporter의 핵심 기능인 **Transform Engine**을 구현한�
 
 ### 아키텍처 위치
 
-```
+```text
 Jolokia (JSON) → Collector → [Transform Engine] → Server (/metrics)
                                     ↑
-                              Phase 3 범위
+                              Phase 3 Scope
 ```
 
 ### 주요 컴포넌트

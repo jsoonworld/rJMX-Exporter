@@ -106,6 +106,6 @@ Before marking complete:
 
 ## Usage Example
 
-```
+```text
 /implement "Jolokia HTTP client"
 ```

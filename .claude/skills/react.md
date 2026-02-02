@@ -9,7 +9,7 @@ Follow explicit thinking loops when solving complex problems.
 ## Cycle Steps
 
 ### 1. Reason
-```
+```text
 [Reason]
 - Current state: {Known information}
 - Goal: {What to achieve}
@@ -18,14 +18,14 @@ Follow explicit thinking loops when solving complex problems.
 ```
 
 ### 2. Act
-```
+```text
 [Act]
 - Tool: {Tool to use}
 - Purpose: {Purpose of this action}
 ```
 
 ### 3. Observe
-```
+```text
 [Observe]
 - Result: {Action result}
 - Evaluation: {Success/failure, meaning}
@@ -34,12 +34,12 @@ Follow explicit thinking loops when solving complex problems.
 
 ## Usage Example
 
-```
+```text
 /react "Fix YAML parsing error in config.rs"
 ```
 
 Output:
-```
+```text
 [Reason]
 - Current state: config.rs exists but YAML parsing error occurs
 - Goal: Identify and fix the error cause

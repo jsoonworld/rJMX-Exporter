@@ -1,6 +1,6 @@
 # rJMX-Exporter
 
-> **Status: Design Phase** - Implementation not yet started.
+> **Status: Phase 1 Foundation implemented (as of 2026-02-01)** - Phase 2 design in progress.
 
 A high-performance JMX Metric Exporter for Prometheus, written in Rust.
 
@@ -45,7 +45,7 @@ However, it has architectural limitations:
 
 ## Architecture
 
-```
+```text
 ┌─────────────────┐      ┌─────────────────┐      ┌─────────────────┐
 │    JVM App      │      │  rJMX-Exporter  │      │   Prometheus    │
 │                 │      │     (Rust)      │      │                 │

@@ -12,14 +12,14 @@ Phase 2는 rJMX-Exporter의 핵심 데이터 수집 계층을 구현합니다. J
 
 ```text
 ┌─────────────────────────────────────────────────────────────────────┐
-│                         Phase 2 Scope                                │
+│                         Phase 2 Scope                               │
 ├─────────────────────────────────────────────────────────────────────┤
-│                                                                      │
-│   Java App (Jolokia)  ──HTTP/JSON──►  Collector Module               │
-│                                       ├── client.rs (HTTP 요청)      │
-│                                       ├── parser.rs (JSON 파싱)      │
-│                                       └── mod.rs (통합 인터페이스)   │
-│                                                                      │
+│                                                                     │
+│   Java App (Jolokia)  ──HTTP/JSON──►  Collector Module              │
+│                                       ├── client.rs (HTTP request)  │
+│                                       ├── parser.rs (JSON parsing)  │
+│                                       └── mod.rs (unified interface)│
+│                                                                     │
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
