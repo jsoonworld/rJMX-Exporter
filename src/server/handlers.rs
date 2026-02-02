@@ -110,6 +110,7 @@ pub async fn metrics(State(state): State<AppState>) -> impl IntoResponse {
                         error = ?response.error,
                         "MBean returned non-200 status"
                     );
+                    errors.push(format!("{}: status {}", mbean, response.status));
                 }
             }
             Err(e) => {
@@ -124,6 +125,7 @@ pub async fn metrics(State(state): State<AppState>) -> impl IntoResponse {
         Ok(metrics) => metrics,
         Err(e) => {
             warn!(error = %e, "Transform error");
+            errors.push(format!("transform: {}", e));
             vec![]
         }
     };

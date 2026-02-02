@@ -34,10 +34,18 @@ fn config_to_ruleset(config: &Config) -> RuleSet {
         .rules
         .iter()
         .map(|r| {
-            let metric_type = match r.r#type.to_lowercase().as_str() {
+            let rule_type = r.r#type.to_lowercase();
+            let metric_type = match rule_type.as_str() {
                 "gauge" => MetricType::Gauge,
                 "counter" => MetricType::Counter,
-                _ => MetricType::Untyped,
+                _ => {
+                    tracing::warn!(
+                        rule_type = %r.r#type,
+                        rule_name = %r.name,
+                        "Unknown metric type; defaulting to untyped"
+                    );
+                    MetricType::Untyped
+                }
             };
 
             let mut rule = Rule::new(&r.pattern, &r.name, metric_type);
