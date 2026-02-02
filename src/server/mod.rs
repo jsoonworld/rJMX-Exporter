@@ -13,13 +13,56 @@ use tokio::signal;
 use tower_http::trace::TraceLayer;
 use tracing::info;
 
+use crate::collector::JolokiaClient;
 use crate::config::Config;
+use crate::transformer::{MetricType, Rule, RuleSet, TransformEngine};
 
 /// Application state shared across handlers
 #[derive(Clone)]
 pub struct AppState {
     /// Application configuration
     pub config: Arc<Config>,
+    /// Jolokia HTTP client
+    pub client: Arc<JolokiaClient>,
+    /// Metric transformation engine
+    pub engine: Arc<TransformEngine>,
+}
+
+/// Convert config rules to transformer RuleSet
+fn config_to_ruleset(config: &Config) -> RuleSet {
+    let rules: Vec<Rule> = config
+        .rules
+        .iter()
+        .map(|r| {
+            let metric_type = match r.r#type.to_lowercase().as_str() {
+                "gauge" => MetricType::Gauge,
+                "counter" => MetricType::Counter,
+                _ => MetricType::Untyped,
+            };
+
+            let mut rule = Rule::new(&r.pattern, &r.name, metric_type);
+
+            if let Some(ref help) = r.help {
+                rule = rule.with_help(help);
+            }
+
+            for (k, v) in &r.labels {
+                rule = rule.with_label(k, v);
+            }
+
+            if let Some(ref value) = r.value {
+                rule = rule.with_value(value);
+            }
+
+            if let Some(factor) = r.value_factor {
+                rule = rule.with_value_factor(factor);
+            }
+
+            rule
+        })
+        .collect();
+
+    RuleSet::from_rules(rules)
 }
 
 /// Run the HTTP server
@@ -34,8 +77,28 @@ pub async fn run(config: Config, port: u16) -> Result<()> {
     let bind_address = config.server.bind_address.clone();
     let metrics_path = config.server.path.clone();
 
+    // Create Jolokia client
+    let mut client = JolokiaClient::new(&config.jolokia.url, config.jolokia.timeout_ms)?;
+    if let (Some(ref username), Some(ref password)) =
+        (&config.jolokia.username, &config.jolokia.password)
+    {
+        client = client.with_auth(username, password);
+    }
+
+    // Create transform engine with rules from config
+    let ruleset = config_to_ruleset(&config);
+    if let Err(e) = ruleset.compile_all() {
+        tracing::warn!(error = %e, "Some rules failed to compile");
+    }
+
+    let engine = TransformEngine::new(ruleset)
+        .with_lowercase_names(config.lowercase_output_name)
+        .with_lowercase_labels(config.lowercase_output_label_names);
+
     let state = AppState {
         config: Arc::new(config),
+        client: Arc::new(client),
+        engine: Arc::new(engine),
     };
 
     // Build router with configurable metrics path
