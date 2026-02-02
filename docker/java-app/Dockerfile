@@ -11,10 +11,10 @@ RUN apk add --no-cache curl
 WORKDIR /app
 
 # Download Jolokia agent
-ARG JOLOKIA_VERSION=1.7.2
+ARG JOLOKIA_VERSION=2.1.2
 RUN mkdir -p /opt/jolokia && \
     curl -fsSL -o /opt/jolokia/jolokia-jvm.jar \
-    "https://repo1.maven.org/maven2/org/jolokia/jolokia-jvm/${JOLOKIA_VERSION}/jolokia-jvm-${JOLOKIA_VERSION}.jar"
+    "https://repo1.maven.org/maven2/org/jolokia/jolokia-agent-jvm/${JOLOKIA_VERSION}/jolokia-agent-jvm-${JOLOKIA_VERSION}-javaagent.jar"
 
 # Copy sample application
 COPY App.java /app/

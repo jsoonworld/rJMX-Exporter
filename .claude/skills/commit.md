@@ -11,7 +11,7 @@ Analyze changes and create a commit.
 
 ## Commit Message Format
 
-```
+```text
 <type>: <subject>
 
 <body>

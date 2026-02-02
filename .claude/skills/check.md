@@ -18,7 +18,7 @@ cargo fmt -- --check && cargo clippy -- -D warnings && cargo test
 
 ## Checklist Output
 
-```
+```text
 [ ] Format check (cargo fmt)
 [ ] Lint check (cargo clippy)
 [ ] Tests (cargo test)

@@ -75,7 +75,7 @@
 | Aspect | Detail |
 |--------|--------|
 | Crate | `reqwest` |
-| Version | 0.12.x |
+| Version | 0.11.x |
 | Features | `json`, `rustls-tls` |
 
 **Why Reqwest?**
