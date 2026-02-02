@@ -377,8 +377,7 @@ impl JolokiaClient {
 
     /// Basic Auth 설정
     pub fn with_auth(mut self, username: &str, password: &str) -> Self {
-        // 인증 정보는 요청 시 적용
-        // 구현 시 header 추가 로직
+        self.auth = Some((username.to_string(), password.to_string()));
         self
     }
 
