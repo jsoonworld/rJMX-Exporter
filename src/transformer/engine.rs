@@ -108,16 +108,79 @@ impl TransformEngine {
         &self,
         response: &JolokiaResponse,
     ) -> Result<Vec<PrometheusMetric>, TransformError> {
-        // Extract attribute from RequestInfo (e.g., "HeapMemoryUsage", "ThreadCount")
-        let attribute = response.request.attribute.as_ref().and_then(|v| v.as_str());
+        // Extract attribute(s) from RequestInfo
+        // Jolokia supports both single attribute (string) and multiple attributes (array)
+        let attributes = self.extract_attributes(&response.request.attribute);
 
         match &response.value {
-            MBeanValue::Number(n) => self.transform_simple(&response.request.mbean, attribute, *n),
+            MBeanValue::Number(n) => {
+                // For single numeric value, use the first attribute if available
+                let attr = attributes.first().map(|s| s.as_str());
+                self.transform_simple(&response.request.mbean, attr, *n)
+            }
             MBeanValue::Composite(map) => {
-                self.transform_composite(&response.request.mbean, attribute, map)
+                // For composite values, handle both single and multiple attributes
+                if attributes.is_empty() {
+                    self.transform_composite(&response.request.mbean, None, map)
+                } else if attributes.len() == 1 {
+                    self.transform_composite(
+                        &response.request.mbean,
+                        Some(attributes[0].as_str()),
+                        map,
+                    )
+                } else {
+                    // Multiple attributes: the composite map keys are the attribute names
+                    // Each attribute maps to its value in the composite
+                    let mut metrics = Vec::new();
+                    for attr in &attributes {
+                        if let Some(attr_value) = map.get(attr) {
+                            match attr_value {
+                                AttributeValue::Integer(n) => {
+                                    let mut m = self.transform_simple(
+                                        &response.request.mbean,
+                                        Some(attr.as_str()),
+                                        *n as f64,
+                                    )?;
+                                    metrics.append(&mut m);
+                                }
+                                AttributeValue::Float(n) => {
+                                    let mut m = self.transform_simple(
+                                        &response.request.mbean,
+                                        Some(attr.as_str()),
+                                        *n,
+                                    )?;
+                                    metrics.append(&mut m);
+                                }
+                                AttributeValue::Object(nested) => {
+                                    let mut m = self.transform_composite(
+                                        &response.request.mbean,
+                                        Some(attr.as_str()),
+                                        nested,
+                                    )?;
+                                    metrics.append(&mut m);
+                                }
+                                _ => {}
+                            }
+                        }
+                    }
+                    Ok(metrics)
+                }
             }
             MBeanValue::Wildcard(wildcard) => self.transform_wildcard(wildcard),
             _ => Ok(vec![]),
+        }
+    }
+
+    /// Extract attributes from RequestInfo.attribute field
+    /// Handles both string (single attribute) and array (multiple attributes)
+    fn extract_attributes(&self, attribute: &Option<serde_json::Value>) -> Vec<String> {
+        match attribute {
+            Some(serde_json::Value::String(s)) => vec![s.clone()],
+            Some(serde_json::Value::Array(arr)) => arr
+                .iter()
+                .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                .collect(),
+            _ => vec![],
         }
     }
 
@@ -714,6 +777,68 @@ mod tests {
         assert_eq!(
             flattened, "java.lang<type=Memory><HeapMemoryUsage><used>",
             "Composite attribute path should be properly formatted"
+        );
+    }
+
+    /// Test that verifies array attribute handling for multiple attributes
+    #[test]
+    fn test_array_attribute_handling() {
+        let engine = create_test_engine();
+
+        // Test extract_attributes with string value
+        let string_attr = Some(serde_json::json!("ThreadCount"));
+        let attrs = engine.extract_attributes(&string_attr);
+        assert_eq!(attrs, vec!["ThreadCount"]);
+
+        // Test extract_attributes with array value
+        let array_attr = Some(serde_json::json!(["ThreadCount", "PeakThreadCount"]));
+        let attrs = engine.extract_attributes(&array_attr);
+        assert_eq!(attrs, vec!["ThreadCount", "PeakThreadCount"]);
+
+        // Test extract_attributes with None
+        let none_attr: Option<serde_json::Value> = None;
+        let attrs = engine.extract_attributes(&none_attr);
+        assert!(attrs.is_empty());
+    }
+
+    /// Test transformation with multiple attributes in a single response
+    #[test]
+    fn test_transform_multiple_attributes() {
+        use crate::collector::RequestInfo;
+
+        let engine = create_test_engine();
+
+        // Create a response with multiple attributes (array)
+        let mut composite_value = HashMap::new();
+        composite_value.insert("ThreadCount".to_string(), AttributeValue::Integer(42));
+        composite_value.insert("PeakThreadCount".to_string(), AttributeValue::Integer(100));
+
+        let responses = vec![JolokiaResponse {
+            request: RequestInfo {
+                mbean: "java.lang:type=Threading".to_string(),
+                attribute: Some(serde_json::json!(["ThreadCount", "PeakThreadCount"])),
+                request_type: "read".to_string(),
+            },
+            value: MBeanValue::Composite(composite_value),
+            status: 200,
+            timestamp: 1609459200,
+            error: None,
+            error_type: None,
+        }];
+
+        let metrics = engine.transform(&responses).unwrap();
+
+        // Should produce metrics for both attributes
+        let metric_names: Vec<&str> = metrics.iter().map(|m| m.name.as_str()).collect();
+        assert!(
+            metric_names.contains(&"jvm_threads_ThreadCount"),
+            "Expected jvm_threads_ThreadCount in {:?}",
+            metric_names
+        );
+        assert!(
+            metric_names.contains(&"jvm_threads_PeakThreadCount"),
+            "Expected jvm_threads_PeakThreadCount in {:?}",
+            metric_names
         );
     }
 }
