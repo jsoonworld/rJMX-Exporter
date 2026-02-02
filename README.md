@@ -1,52 +1,168 @@
 # rJMX-Exporter
 
-Rust-based high-performance JMX Metric Exporter for Prometheus
+> **Status: Phase 1 Foundation implemented (as of 2026-02-01)** - Phase 2 design in progress.
 
-## Overview
+A high-performance JMX Metric Exporter for Prometheus, written in Rust.
 
-`rJMX-Exporter`는 Java 애플리케이션의 JMX 메트릭을 Prometheus 포맷으로 변환하는 초경량 고성능 사이드카입니다.
+## Background
 
-기존 Java 기반 `jmx_exporter`와 달리 JVM 없이 실행되어:
-- 메모리 사용량 90% 이상 절감 (50MB -> 5MB 미만)
-- 대상 애플리케이션의 GC 및 런타임에 영향 없음
-- 빠른 시작 시간 및 낮은 지연 시간
+[jmx_exporter](https://github.com/prometheus/jmx_exporter) is the official Prometheus exporter for JMX metrics, widely used to monitor JVM applications (Kafka, Cassandra, Spring Boot, etc.).
 
-## Quick Start
+However, it has architectural limitations:
 
-```bash
-# Build
-cargo build --release
+**javaagent mode** (recommended by maintainers):
+- Runs inside the target JVM → shares heap memory and GC
+- Can cause OOM when the target app is under memory pressure
+- Adds latency during GC pauses
+- Must restart with the application
 
-# Run
-./target/release/rjmx-exporter --config config.yaml
-```
+**HTTP server mode** (standalone):
+- Requires a separate JVM process → ~50MB+ memory overhead
+- Still needs JVM installation and management
+
+**rJMX-Exporter** solves these issues by:
+- Running as a native binary (no JVM required)
+- Collecting metrics via [Jolokia](https://jolokia.org/) (JMX-over-HTTP)
+- Complete isolation from target application
+
+## Goals
+
+| Metric | jmx_exporter (Java) | rJMX-Exporter (Target) |
+|--------|---------------------|------------------------|
+| Memory Usage | ~50MB (standalone) | <10MB |
+| Requires JVM | Yes | No |
+| Impact on Target App | Shares GC/Heap (agent mode) | None |
+| Startup Time | seconds | <100ms |
+
+## Planned Features
+
+- Native Rust binary (no JVM required)
+- Jolokia HTTP/JSON collection (agent or WAR)
+- Prometheus text exposition at `/metrics`
+- Rule-based mapping with partial `jmx_exporter` YAML compatibility (`pattern`, `name`, `type`, `labels`)
+- Resource targets: <10MB memory, <100ms startup, <10ms scrape latency
+- Sidecar-first deployment; multi-target configuration under consideration
 
 ## Architecture
 
-```
-Java App (Jolokia) --> rJMX-Exporter (Rust) --> Prometheus
+```text
+┌─────────────────┐      ┌─────────────────┐      ┌─────────────────┐
+│    JVM App      │      │  rJMX-Exporter  │      │   Prometheus    │
+│                 │      │     (Rust)      │      │                 │
+│  ┌───────────┐  │      │                 │      │                 │
+│  │  Jolokia  │◄─┼──────┤  Collector      │      │                 │
+│  │  Agent    │  │ JSON │       ↓         │      │                 │
+│  └───────────┘  │      │  Transformer    │      │                 │
+│                 │      │       ↓         │      │                 │
+│                 │      │  /metrics  ◄────┼──────┤  Scraper        │
+└─────────────────┘      └─────────────────┘      └─────────────────┘
 ```
 
-## Configuration
+## Installation and Usage (Planned)
+
+1. Install Jolokia on the target JVM (agent or WAR).
+2. Create a config file (see below).
+3. Run rJMX-Exporter with the config file (CLI flags TBD).
+4. Configure Prometheus to scrape the `/metrics` endpoint.
+
+## Migration from jmx_exporter
+
+Designed for easy migration from existing jmx_exporter setups:
+
+```diff
+  # Your existing jmx_exporter config
++ jolokia:
++   url: "http://localhost:8778/jolokia"
++
+  lowercaseOutputName: true
+  whitelistObjectNames:
+    - "java.lang:*"
+  rules:
+    - pattern: "..."
+      name: "..."
+      type: gauge
+```
+
+**3-Step Migration:**
+1. Add Jolokia agent to your JVM app: `-javaagent:jolokia-agent.jar=port=8778`
+2. Copy your existing config and add the `jolokia:` block
+3. Run rJMX-Exporter: `./rjmx-exporter -c config.yaml`
+
+## Configuration (Planned)
 
 ```yaml
-# config.yaml
-targets:
-  - url: "http://localhost:8778/jolokia"
-    name: "my-java-app"
+# rJMX-Exporter specific
+jolokia:
+  url: "http://localhost:8778/jolokia"
+  # username: "user"        # optional
+  # password: "pass"        # optional
+  # timeout_ms: 5000        # optional
 
 server:
   port: 9090
+  path: "/metrics"
+
+# jmx_exporter compatible options
+lowercaseOutputName: true
+lowercaseOutputLabelNames: true
+
+whitelistObjectNames:
+  - "java.lang:*"
+  - "java.nio:*"
+
+blacklistObjectNames:
+  - "java.lang:type=MemoryPool,*"
 
 rules:
   - pattern: "java.lang<type=Memory><HeapMemoryUsage>(\\w+)"
     name: "jvm_memory_heap_$1_bytes"
     type: gauge
+    help: "JVM heap memory usage"
+    labels:
+      app: "my-app"
 ```
+
+### Compatibility Matrix
+
+| Option | Priority | Status |
+|--------|----------|--------|
+| `rules.pattern` | Required | Planned |
+| `rules.name` | Required | Planned |
+| `rules.type` | Required | Planned |
+| `rules.labels` | Required | Planned |
+| `rules.help` | High | Planned |
+| `whitelistObjectNames` | High | Planned |
+| `blacklistObjectNames` | High | Planned |
+| `lowercaseOutputName` | Medium | Planned |
+| `lowercaseOutputLabelNames` | Medium | Planned |
+| `rules.value` | Medium | Planned |
+| `rules.valueFactor` | Medium | Planned |
+
+## Prometheus Configuration (Example)
+
+```yaml
+scrape_configs:
+  - job_name: "rjmx"
+    static_configs:
+      - targets: ["<host>:9090"]
+```
+
+## Tech Stack
+
+- **Rust** (Edition 2021)
+- **Tokio** - async runtime
+- **Axum** - HTTP server for `/metrics`
+- **Reqwest** - HTTP client for Jolokia
+- **Serde** - YAML/JSON parsing
 
 ## Documentation
 
-- [1-Pager (프로젝트 상세)](docs/1-PAGER.md)
+- [Design Document (1-Pager)](docs/1-PAGER.md)
+- [Technology Stack](docs/TECH-STACK.md)
+
+## Contributing
+
+Issues and PRs are welcome. For now, please check the design doc and open questions first.
 
 ## License
 

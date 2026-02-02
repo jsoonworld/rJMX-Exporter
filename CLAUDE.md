@@ -80,6 +80,47 @@ Types: `feat`, `fix`, `docs`, `refactor`, `test`, `chore`
 
 ---
 
+## Agent Cognitive Architecture
+
+### Available Patterns
+
+| Pattern | Use Case | Skill |
+|---------|----------|-------|
+| **ReAct** | Unpredictable problem solving | `/react` |
+| **Plan-and-Execute** | Complex feature implementation | `/plan` |
+| **Reflection** | Code quality review | `/reflect` |
+
+### Pattern Selection Criteria
+
+```
+Is the workflow predictable?
+├── Yes → Sequential execution
+└── No → Dynamic orchestration
+    ├── Speed matters → ReAct
+    └── Quality matters → Add Reflection
+```
+
+---
+
+## Skills Directory
+
+| Skill | Description |
+|-------|-------------|
+| `/test` | Run tests |
+| `/lint` | Code quality check (fmt + clippy) |
+| `/build` | Build project |
+| `/check` | Full quality check |
+| `/doc` | Generate documentation |
+| `/commit` | Create commit |
+| `/review` | Code review |
+| `/plan` | Create execution plan |
+| `/react` | Execute ReAct pattern |
+| `/reflect` | Self-review |
+| `/debug` | Debug issues |
+| `/implement` | Implement features |
+
+---
+
 ## Tech Stack
 
 | Category | Technology |
@@ -121,13 +162,27 @@ cargo doc --open
 
 ## Directory Structure
 
-```
+```text
 rJMX-Exporter/
 ├── Cargo.toml
 ├── CLAUDE.md              # This file
 ├── README.md
 ├── .claude/
-│   └── skills/            # Claude Code skills
+│   ├── settings.local.json
+│   ├── system_prompt_additions.md
+│   └── skills/
+│       ├── test.md
+│       ├── lint.md
+│       ├── build.md
+│       ├── check.md
+│       ├── doc.md
+│       ├── commit.md
+│       ├── review.md
+│       ├── plan.md
+│       ├── react.md
+│       ├── reflect.md
+│       ├── debug.md
+│       └── implement.md
 ├── docs/
 │   └── 1-PAGER.md
 ├── src/
@@ -136,8 +191,15 @@ rJMX-Exporter/
 │   ├── config.rs
 │   ├── error.rs
 │   ├── collector/
+│   │   ├── mod.rs
+│   │   ├── client.rs         # (planned)
+│   │   └── parser.rs         # (planned)
 │   ├── transformer/
+│   │   ├── mod.rs
+│   │   └── rules.rs          # (planned)
 │   └── server/
+│       ├── mod.rs
+│       └── handlers.rs
 ├── tests/
 └── examples/
 ```
@@ -181,9 +243,37 @@ rules:
 
 ---
 
+## State Management
+
+For long-running tasks, use:
+
+- **progress.txt**: Free-form progress notes
+- **tasks.json**: Structured task list
+- **git**: Commit all changes
+
+---
+
 ## References
 
 - [Jolokia](https://jolokia.org/) - JMX to HTTP/JSON
 - [jmx_exporter](https://github.com/prometheus/jmx_exporter) - Original Java version
 - [Tokio](https://tokio.rs/) - Async runtime
 - [Axum](https://github.com/tokio-rs/axum) - HTTP framework
+
+---
+
+## Current Status
+
+**Status: Phase 1 Foundation implemented (as of 2026-02-01)**
+
+### Completed (Phase 1)
+
+- [x] Create Cargo.toml and basic project structure
+- [x] Implement Tokio + Axum basic server
+- [x] Set up Jolokia test environment (Docker)
+
+### Next Steps (Phase 2)
+
+1. [ ] Implement Jolokia HTTP client
+2. [ ] Parse Jolokia JSON responses
+3. [ ] Define MBean data structures
