@@ -1,0 +1,38 @@
+# benchmark/prometheus.yaml
+#
+# Prometheus configuration for benchmark environment
+# Scrapes both jmx_exporter and rJMX-Exporter for comparison
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  # rJMX-Exporter (Rust version)
+  - job_name: 'rjmx-exporter'
+    static_configs:
+      - targets: ['rjmx-exporter:9090']
+    metrics_path: /metrics
+    scrape_interval: 5s
+    scrape_timeout: 5s
+
+  # jmx_exporter (Java version)
+  - job_name: 'jmx-exporter'
+    static_configs:
+      - targets: ['jmx-exporter:9091']
+    metrics_path: /metrics
+    scrape_interval: 5s
+    scrape_timeout: 5s
+
+  # Java application (Jolokia direct, for reference)
+  - job_name: 'java-app'
+    static_configs:
+      - targets: ['java-app:8080']
+    metrics_path: /info
+    scrape_interval: 10s
+    scrape_timeout: 5s
+
+  # Prometheus self-monitoring
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']

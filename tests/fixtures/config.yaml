@@ -1,0 +1,66 @@
+# Test configuration for rJMX-Exporter
+#
+# This configuration is used by Docker integration tests
+# to collect JVM metrics from a test Java application.
+
+jolokia:
+  url: "http://java-app:8778/jolokia"
+  timeout_ms: 5000
+
+server:
+  port: 9090
+  path: "/metrics"
+  bind_address: "0.0.0.0"
+
+# jmx_exporter compatible settings
+lowercaseOutputName: true
+lowercaseOutputLabelNames: true
+
+rules:
+  # JVM Memory metrics
+  - pattern: "java\\.lang<type=Memory><HeapMemoryUsage><(\\w+)>"
+    name: "jvm_memory_heap_$1_bytes"
+    type: gauge
+    help: "JVM heap memory usage in bytes"
+    labels:
+      area: "heap"
+
+  - pattern: "java\\.lang<type=Memory><NonHeapMemoryUsage><(\\w+)>"
+    name: "jvm_memory_nonheap_$1_bytes"
+    type: gauge
+    help: "JVM non-heap memory usage in bytes"
+    labels:
+      area: "nonheap"
+
+  # JVM Threading metrics
+  - pattern: "java\\.lang<type=Threading><(ThreadCount|DaemonThreadCount|PeakThreadCount)>"
+    name: "jvm_threads_$1"
+    type: gauge
+    help: "JVM thread count"
+
+  # JVM GC metrics
+  - pattern: "java\\.lang<type=GarbageCollector,name=([^>]+)><CollectionCount>"
+    name: "jvm_gc_collection_count"
+    type: counter
+    help: "JVM garbage collection count"
+    labels:
+      gc: "$1"
+
+  - pattern: "java\\.lang<type=GarbageCollector,name=([^>]+)><CollectionTime>"
+    name: "jvm_gc_collection_time_ms"
+    type: counter
+    help: "JVM garbage collection time in milliseconds"
+    labels:
+      gc: "$1"
+
+  # JVM Class Loading metrics
+  - pattern: "java\\.lang<type=ClassLoading><(LoadedClassCount|TotalLoadedClassCount|UnloadedClassCount)>"
+    name: "jvm_classes_$1"
+    type: gauge
+    help: "JVM class loading metrics"
+
+  # JVM Runtime metrics
+  - pattern: "java\\.lang<type=Runtime><Uptime>"
+    name: "jvm_uptime_ms"
+    type: counter
+    help: "JVM uptime in milliseconds"

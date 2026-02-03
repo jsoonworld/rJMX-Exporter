@@ -1,0 +1,50 @@
+# rJMX-Exporter Configuration Example
+#
+# Copy this file to config.yaml and modify as needed
+
+# Jolokia endpoint configuration
+jolokia:
+  url: "http://localhost:8778/jolokia"
+  # username: "jolokia"  # Optional: uncomment for basic auth
+  # password: "secret"   # Optional: uncomment for basic auth
+  timeout_ms: 5000
+
+# HTTP server configuration
+server:
+  port: 9090
+  path: "/metrics"
+  bind_address: "0.0.0.0"
+
+# Metric transformation rules
+rules:
+  # JVM Memory metrics
+  - pattern: 'java.lang<type=Memory><HeapMemoryUsage>(\w+)'
+    name: "jvm_memory_heap_$1_bytes"
+    type: gauge
+    help: "JVM heap memory usage"
+
+  - pattern: 'java.lang<type=Memory><NonHeapMemoryUsage>(\w+)'
+    name: "jvm_memory_nonheap_$1_bytes"
+    type: gauge
+    help: "JVM non-heap memory usage"
+
+  # JVM Thread metrics
+  - pattern: 'java.lang<type=Threading><(\w+)>'
+    name: "jvm_threads_$1"
+    type: gauge
+    help: "JVM thread metrics"
+
+  # JVM GC metrics
+  - pattern: "java.lang<type=GarbageCollector,name=([^>]+)><CollectionCount>"
+    name: "jvm_gc_collection_count"
+    type: counter
+    help: "JVM garbage collection count"
+    labels:
+      gc: "$1"
+
+  - pattern: "java.lang<type=GarbageCollector,name=([^>]+)><CollectionTime>"
+    name: "jvm_gc_collection_time_ms"
+    type: counter
+    help: "JVM garbage collection time in milliseconds"
+    labels:
+      gc: "$1"

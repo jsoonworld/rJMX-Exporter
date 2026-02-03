@@ -1,0 +1,115 @@
+# benchmark/jmx-exporter-config.yaml
+#
+# Configuration for prometheus/jmx_exporter (Java version)
+# This config produces equivalent metrics to benchmark/config.yaml
+#
+# Used for comparing jmx_exporter vs rJMX-Exporter performance
+
+# jmx_exporter HTTP server port (standalone mode)
+hostPort: java-app:8778
+
+# Convert metric names to lowercase for consistency
+lowercaseOutputName: true
+lowercaseOutputLabelNames: true
+
+# Rules to match jmx_exporter rules with rJMX-Exporter output
+rules:
+  # ============================================
+  # JVM Memory Metrics
+  # ============================================
+
+  # Heap Memory
+  - pattern: 'java.lang<type=Memory><>HeapMemoryUsage\.(\w+):'
+    name: jvm_memory_heap_$1_bytes
+    type: GAUGE
+    help: "JVM heap memory usage"
+
+  # Non-Heap Memory
+  - pattern: 'java.lang<type=Memory><>NonHeapMemoryUsage\.(\w+):'
+    name: jvm_memory_nonheap_$1_bytes
+    type: GAUGE
+    help: "JVM non-heap memory usage"
+
+  # ============================================
+  # JVM Threading Metrics
+  # ============================================
+
+  - pattern: 'java.lang<type=Threading><>ThreadCount:'
+    name: jvm_threads_current
+    type: GAUGE
+    help: "Current number of live threads"
+
+  - pattern: 'java.lang<type=Threading><>DaemonThreadCount:'
+    name: jvm_threads_daemon
+    type: GAUGE
+    help: "Current number of daemon threads"
+
+  - pattern: 'java.lang<type=Threading><>PeakThreadCount:'
+    name: jvm_threads_peak
+    type: GAUGE
+    help: "Peak number of threads"
+
+  - pattern: 'java.lang<type=Threading><>TotalStartedThreadCount:'
+    name: jvm_threads_started_total
+    type: COUNTER
+    help: "Total number of threads started"
+
+  # ============================================
+  # JVM Garbage Collection Metrics
+  # ============================================
+
+  - pattern: 'java.lang<type=GarbageCollector,name=([^>]+)><>CollectionCount:'
+    name: jvm_gc_collection_count
+    type: COUNTER
+    help: "JVM garbage collection count"
+    labels:
+      gc: "$1"
+
+  - pattern: 'java.lang<type=GarbageCollector,name=([^>]+)><>CollectionTime:'
+    name: jvm_gc_collection_time_ms
+    type: COUNTER
+    help: "JVM garbage collection time in milliseconds"
+    labels:
+      gc: "$1"
+
+  # ============================================
+  # JVM Class Loading Metrics
+  # ============================================
+
+  - pattern: 'java.lang<type=ClassLoading><>LoadedClassCount:'
+    name: jvm_classes_loaded
+    type: GAUGE
+    help: "Number of classes currently loaded"
+
+  - pattern: 'java.lang<type=ClassLoading><>TotalLoadedClassCount:'
+    name: jvm_classes_loaded_total
+    type: COUNTER
+    help: "Total number of classes loaded since JVM start"
+
+  - pattern: 'java.lang<type=ClassLoading><>UnloadedClassCount:'
+    name: jvm_classes_unloaded_total
+    type: COUNTER
+    help: "Total number of classes unloaded since JVM start"
+
+  # ============================================
+  # JVM Runtime Metrics
+  # ============================================
+
+  - pattern: 'java.lang<type=Runtime><>Uptime:'
+    name: jvm_uptime_ms
+    type: COUNTER
+    help: "JVM uptime in milliseconds"
+
+  # ============================================
+  # JVM Operating System Metrics
+  # ============================================
+
+  - pattern: 'java.lang<type=OperatingSystem><>AvailableProcessors:'
+    name: jvm_os_available_processors
+    type: GAUGE
+    help: "Number of processors available to the JVM"
+
+  - pattern: 'java.lang<type=OperatingSystem><>SystemLoadAverage:'
+    name: jvm_os_system_load_average
+    type: GAUGE
+    help: "System load average for the last minute"
