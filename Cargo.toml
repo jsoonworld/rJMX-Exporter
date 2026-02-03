@@ -17,10 +17,10 @@ tokio = { version = "1.35", features = ["full"] }
 axum = { version = "0.7", features = ["macros"] }
 axum-server = { version = "0.7", features = ["tls-rustls"] }
 tower = "0.4"
-tower-http = { version = "0.5", features = ["trace", "cors"] }
+tower-http = { version = "0.6", features = ["trace", "cors"] }
 
 # HTTP client
-reqwest = { version = "0.11", default-features = false, features = ["json", "rustls-tls"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 
 # Serialization
 serde = { version = "1.0", features = ["derive"] }
@@ -32,7 +32,7 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 
 # Error handling
-thiserror = "1.0"
+thiserror = "2.0"
 anyhow = "1.0"
 
 # CLI
@@ -45,11 +45,11 @@ regex = "1.10"
 [dev-dependencies]
 # Testing
 tokio-test = "0.4"
-reqwest = { version = "0.11", default-features = false, features = ["json", "rustls-tls"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 assert_cmd = "2.0"
 predicates = "3.0"
-wiremock = "0.5"
-criterion = "0.5"
+wiremock = "0.6"
+criterion = "0.8"
 tempfile = "3.10"
 
 [[bench]]
