@@ -152,17 +152,7 @@ pub async fn metrics(State(state): State<AppState>) -> impl IntoResponse {
 
     // Transform to Prometheus metrics
     let prometheus_metrics = match state.engine.transform(&all_responses) {
-        Ok(metrics) => {
-            // Record rule matches for internal metrics
-            for rule in state.engine.rules().rules() {
-                if rule.is_compiled() {
-                    // Record rule activity (simplified - actual match counting would require
-                    // more detailed tracking in the transform engine)
-                    metrics_registry.record_rule_match(&rule.pattern);
-                }
-            }
-            metrics
-        }
+        Ok(metrics) => metrics,
         Err(e) => {
             warn!(error = %e, "Transform error");
             errors.push(format!("transform: {}", e));
