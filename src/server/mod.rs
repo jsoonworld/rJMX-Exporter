@@ -95,9 +95,7 @@ pub async fn run(config: Config, port: u16) -> Result<()> {
 
     // Create transform engine with rules from config
     let ruleset = config_to_ruleset(&config);
-    if let Err(e) = ruleset.compile_all() {
-        tracing::warn!(error = %e, "Some rules failed to compile");
-    }
+    ruleset.compile_all()?;
 
     let engine = TransformEngine::new(ruleset)
         .with_lowercase_names(config.lowercase_output_name)

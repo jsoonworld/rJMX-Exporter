@@ -305,6 +305,10 @@ impl TransformEngine {
     }
 
     /// Transform a wildcard response
+    ///
+    /// For wildcard responses, we need to handle each attribute type appropriately:
+    /// - Numeric values (Integer/Float) -> transform_simple
+    /// - Object values (nested composites) -> transform_composite recursively
     fn transform_wildcard(
         &self,
         wildcard: &HashMap<String, HashMap<String, AttributeValue>>,
@@ -312,10 +316,27 @@ impl TransformEngine {
         let mut metrics = Vec::new();
 
         for (mbean_name, attrs) in wildcard {
-            // For wildcard responses, the attribute info is embedded in the value structure
-            // Each key in attrs is the attribute name
-            let mut mbean_metrics = self.transform_composite(mbean_name, None, attrs)?;
-            metrics.append(&mut mbean_metrics);
+            // Handle each attribute based on its type
+            for (attr_name, attr_value) in attrs {
+                match attr_value {
+                    AttributeValue::Integer(n) => {
+                        let mut m = self.transform_simple(mbean_name, Some(attr_name), *n as f64)?;
+                        metrics.append(&mut m);
+                    }
+                    AttributeValue::Float(n) => {
+                        let mut m = self.transform_simple(mbean_name, Some(attr_name), *n)?;
+                        metrics.append(&mut m);
+                    }
+                    AttributeValue::Object(nested) => {
+                        // Recursively handle nested composite objects
+                        let mut m = self.transform_composite(mbean_name, Some(attr_name), nested)?;
+                        metrics.append(&mut m);
+                    }
+                    _ => {
+                        // Skip non-numeric types (String, Boolean, Array, Null)
+                    }
+                }
+            }
         }
 
         Ok(metrics)

@@ -171,6 +171,15 @@ fn dry_run(config: &Config, cli: &Cli) -> Result<()> {
         };
         let regex_result = regex::Regex::new(&converted_pattern);
 
+        let is_valid = conversion_error.is_none() && regex_result.is_ok();
+        if !is_valid {
+            errors.push(format!(
+                "Rule {} is invalid (pattern: {})",
+                i + 1,
+                rule.pattern
+            ));
+        }
+
         let rule_info = serde_json::json!({
             "index": i + 1,
             "pattern": rule.pattern,
@@ -179,7 +188,7 @@ fn dry_run(config: &Config, cli: &Cli) -> Result<()> {
             "type": rule.r#type,
             "help": rule.help,
             "labels": rule.labels,
-            "valid": conversion_error.is_none() && regex_result.is_ok(),
+            "valid": is_valid,
             "conversion_error": conversion_error,
             "regex_error": regex_result.as_ref().err().map(|e| e.to_string())
         });
