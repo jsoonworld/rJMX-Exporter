@@ -14,7 +14,32 @@ use serde::Serialize;
 use tracing::{debug, instrument, warn};
 
 use super::AppState;
+use crate::metrics::internal_metrics;
 use crate::transformer::PrometheusFormatter;
+
+/// Sanitize URL for use in metric labels by removing credentials
+///
+/// Converts URLs like "http://user:pass@host:port/path" to "host:port"
+fn sanitize_url_for_label(url: &str) -> String {
+    // Try to parse as URL and extract host:port
+    if let Ok(parsed) = url::Url::parse(url) {
+        let host = parsed.host_str().unwrap_or("unknown");
+        if let Some(port) = parsed.port() {
+            format!("{}:{}", host, port)
+        } else {
+            host.to_string()
+        }
+    } else {
+        // Fallback: try simple string manipulation
+        // Remove scheme and extract after '@' if present
+        let without_scheme = url
+            .trim_start_matches("http://")
+            .trim_start_matches("https://");
+        let after_at = without_scheme.rsplit('@').next().unwrap_or(without_scheme);
+        // Take only host:port part (before any path)
+        after_at.split('/').next().unwrap_or(after_at).to_string()
+    }
+}
 
 /// Health check response
 #[derive(Serialize)]
@@ -70,6 +95,11 @@ const DEFAULT_MBEANS: &[&str] = &[
 #[instrument(skip(state), name = "metrics_handler")]
 pub async fn metrics(State(state): State<AppState>) -> impl IntoResponse {
     let start = Instant::now();
+    let metrics_registry = internal_metrics();
+
+    // Get target name from config for metrics labeling
+    // Sanitize URL to remove credentials (user:pass@host -> host)
+    let target_name = sanitize_url_for_label(&state.config.jolokia.url);
 
     // Determine which MBeans to collect
     let mbeans_to_collect: Vec<String> = if !state.config.whitelist_object_names.is_empty() {
@@ -134,8 +164,17 @@ pub async fn metrics(State(state): State<AppState>) -> impl IntoResponse {
     let formatter = PrometheusFormatter::new();
     let mut output = formatter.format(&prometheus_metrics);
 
-    // Add exporter info metrics
+    // Calculate scrape duration
     let scrape_duration = start.elapsed().as_secs_f64();
+
+    // Record internal metrics for this scrape
+    if errors.is_empty() {
+        metrics_registry.record_scrape_success(&target_name, scrape_duration);
+    } else {
+        metrics_registry.record_scrape_failure(&target_name, scrape_duration);
+    }
+
+    // Add exporter info metrics
     output.push_str(&format!(
         r#"# HELP rjmx_exporter_info rJMX-Exporter information
 # TYPE rjmx_exporter_info gauge
@@ -155,6 +194,9 @@ rjmx_exporter_metrics_scraped {}
         errors.len(),
         prometheus_metrics.len()
     ));
+
+    // Append internal observability metrics
+    output.push_str(&metrics_registry.format_prometheus());
 
     debug!(
         duration_ms = start.elapsed().as_millis() as u64,

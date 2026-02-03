@@ -24,6 +24,9 @@ RUN apk add --no-cache openjdk17 && \
     javac App.java && \
     apk del openjdk17
 
+# Enable Jolokia agent by default
+ENV JAVA_OPTS="-javaagent:/opt/jolokia/jolokia-jvm.jar=port=8778,host=0.0.0.0"
+
 # Expose ports
 EXPOSE 8080 8778
 

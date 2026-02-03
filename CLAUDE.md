@@ -192,11 +192,11 @@ rJMX-Exporter/
 │   ├── error.rs
 │   ├── collector/
 │   │   ├── mod.rs
-│   │   ├── client.rs         # (planned)
-│   │   └── parser.rs         # (planned)
+│   │   ├── client.rs
+│   │   └── parser.rs
 │   ├── transformer/
 │   │   ├── mod.rs
-│   │   └── rules.rs          # (planned)
+│   │   └── rules.rs
 │   └── server/
 │       ├── mod.rs
 │       └── handlers.rs
@@ -264,7 +264,7 @@ For long-running tasks, use:
 
 ## Current Status
 
-### Status: Phase 3 Transform Engine implemented (as of 2026-02-02)
+### Status: Phase 4 Validation complete (as of 2026-02-03)
 
 ### Completed
 
@@ -276,8 +276,11 @@ For long-running tasks, use:
 - [x] Phase 2: Define MBean data structures
 - [x] Phase 3: Rule-based MBean pattern matching
 - [x] Phase 3: Prometheus exposition format output
+- [x] Phase 4: Benchmark resource usage vs Java version
+- [x] Phase 4: Integration tests
 
-### Next Steps (Phase 4)
+### Next Steps (Phase 5 - Future)
 
-1. [ ] Benchmark resource usage vs Java version
-2. [ ] Integration tests
+1. [ ] Kubernetes Helm chart
+2. [ ] Multi-target support
+3. [ ] Grafana dashboard templates

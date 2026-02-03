@@ -1,0 +1,99 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rjmx-exporter
+  labels:
+    app: rjmx-exporter
+    app.kubernetes.io/name: rjmx-exporter
+    app.kubernetes.io/component: metrics-exporter
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: rjmx-exporter
+  template:
+    metadata:
+      labels:
+        app: rjmx-exporter
+        app.kubernetes.io/name: rjmx-exporter
+        app.kubernetes.io/component: metrics-exporter
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9090"
+        prometheus.io/path: "/metrics"
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        runAsGroup: 65534
+        fsGroup: 65534
+      containers:
+        - name: rjmx-exporter
+          image: rjmx-exporter:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http-metrics
+              containerPort: 9090
+              protocol: TCP
+          args:
+            - "--config"
+            - "/etc/rjmx-exporter/config.yaml"
+          env:
+            - name: RUST_LOG
+              value: "info"
+            # Jolokia authentication credentials from secret
+            - name: JOLOKIA_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: rjmx-exporter-credentials
+                  key: jolokia-username
+                  optional: true
+            - name: JOLOKIA_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: rjmx-exporter-credentials
+                  key: jolokia-password
+                  optional: true
+          resources:
+            limits:
+              memory: 50Mi
+              cpu: 100m
+            requests:
+              memory: 20Mi
+              cpu: 50m
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http-metrics
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http-metrics
+            initialDelaySeconds: 3
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          volumeMounts:
+            - name: config
+              mountPath: /etc/rjmx-exporter
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: config
+          configMap:
+            name: rjmx-exporter-config
+        - name: tmp
+          emptyDir: {}
+      serviceAccountName: rjmx-exporter
+      automountServiceAccountToken: false

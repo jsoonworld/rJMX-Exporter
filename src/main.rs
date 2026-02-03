@@ -11,10 +11,29 @@ use tracing::info;
 
 use rjmx_exporter::{
     cli::{Cli, OutputFormat},
-    config::Config,
+    config::{Config, ConfigOverrides},
     server,
     transformer::convert_java_regex,
 };
+
+/// Create ConfigOverrides from CLI arguments
+///
+/// CLI arguments include values from environment variables (handled by clap),
+/// so this gives us the correct precedence: CLI > Env > Config file > Defaults
+fn cli_to_overrides(cli: &Cli) -> ConfigOverrides {
+    ConfigOverrides {
+        port: cli.port,
+        bind_address: cli.bind_address.clone(),
+        metrics_path: cli.metrics_path.clone(),
+        jolokia_url: cli.jolokia_url.clone(),
+        jolokia_timeout: cli.jolokia_timeout,
+        username: cli.username.clone(),
+        password: cli.password.clone(),
+        tls_enabled: cli.tls_enabled,
+        tls_cert_file: cli.tls_cert_file.clone(),
+        tls_key_file: cli.tls_key_file.clone(),
+    }
+}
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -27,8 +46,12 @@ async fn main() -> Result<()> {
     // Initialize logging
     rjmx_exporter::init_logging(&cli.log_level.to_string())?;
 
-    // Load configuration
-    let config = Config::load_or_default(&cli.config)?;
+    // Load configuration from file
+    let mut config = Config::load_or_default(&cli.config)?;
+
+    // Apply CLI/env overrides (precedence: CLI > Env > Config file > Defaults)
+    let overrides = cli_to_overrides(&cli);
+    config.apply_overrides(&overrides);
 
     // Handle --validate mode
     if cli.validate {
@@ -40,9 +63,8 @@ async fn main() -> Result<()> {
         return dry_run(&config, &cli);
     }
 
-    // Apply CLI port override, then validate the final port value
-    let port = cli.port.unwrap_or(config.server.port);
-    Config::validate_port(port)?;
+    // Validate final configuration after all overrides are applied
+    config.validate_final()?;
 
     // Calculate startup duration
     let startup_duration = start_time.elapsed();
@@ -63,20 +85,38 @@ async fn main() -> Result<()> {
         );
     }
 
-    // Start server
-    server::run(config, port).await?;
+    // Start server (port is now part of config)
+    server::run(config).await?;
 
     Ok(())
 }
 
 /// Validate configuration and display results
+///
+/// Note: Config already has CLI/env overrides applied at this point
 fn validate_config(config: &Config, cli: &Cli) -> Result<()> {
     let mut errors: Vec<String> = Vec::new();
 
-    // Validate port (apply CLI override if provided)
-    let port = cli.port.unwrap_or(config.server.port);
-    if let Err(e) = Config::validate_port(port) {
+    // Validate port (overrides already applied to config)
+    if let Err(e) = Config::validate_port(config.server.port) {
         errors.push(format!("Invalid port: {}", e));
+    }
+
+    // Validate metrics path
+    if !config.server.path.starts_with('/') {
+        errors.push("Metrics path must start with '/'".to_string());
+    } else if config.server.path == "/" || config.server.path == "/health" {
+        errors.push("Metrics path must not conflict with '/' or '/health'".to_string());
+    }
+
+    // Validate TLS configuration
+    if config.server.tls.enabled {
+        if config.server.tls.cert_file.is_none() {
+            errors.push("TLS is enabled but cert_file is not specified".to_string());
+        }
+        if config.server.tls.key_file.is_none() {
+            errors.push("TLS is enabled but key_file is not specified".to_string());
+        }
     }
 
     // Validate rule patterns (convert Java regex to Rust regex)
@@ -104,8 +144,10 @@ fn validate_config(config: &Config, cli: &Cli) -> Result<()> {
                 println!("Configuration is valid");
                 println!("  Config file: {}", cli.config.display());
                 println!("  Jolokia URL: {}", config.jolokia.url);
-                println!("  Server port: {}", port);
+                println!("  Server port: {}", config.server.port);
+                println!("  Bind address: {}", config.server.bind_address);
                 println!("  Metrics path: {}", config.server.path);
+                println!("  TLS enabled: {}", config.server.tls.enabled);
                 println!("  Rules: {}", config.rules.len());
             } else {
                 eprintln!("Configuration validation failed:");
@@ -119,8 +161,10 @@ fn validate_config(config: &Config, cli: &Cli) -> Result<()> {
                 "valid": is_valid,
                 "config_file": cli.config.display().to_string(),
                 "jolokia_url": config.jolokia.url,
-                "server_port": port,
+                "server_port": config.server.port,
+                "bind_address": config.server.bind_address,
                 "metrics_path": config.server.path,
+                "tls_enabled": config.server.tls.enabled,
                 "rules_count": config.rules.len(),
                 "errors": errors
             });
@@ -131,8 +175,10 @@ fn validate_config(config: &Config, cli: &Cli) -> Result<()> {
                 "valid": is_valid,
                 "config_file": cli.config.display().to_string(),
                 "jolokia_url": config.jolokia.url,
-                "server_port": port,
+                "server_port": config.server.port,
+                "bind_address": config.server.bind_address,
                 "metrics_path": config.server.path,
+                "tls_enabled": config.server.tls.enabled,
                 "rules_count": config.rules.len(),
                 "errors": errors
             });
@@ -151,12 +197,13 @@ fn validate_config(config: &Config, cli: &Cli) -> Result<()> {
 }
 
 /// Dry run: test configuration and show parsed rules
+///
+/// Note: Config already has CLI/env overrides applied at this point
 fn dry_run(config: &Config, cli: &Cli) -> Result<()> {
     let mut errors: Vec<String> = Vec::new();
 
-    // Validate port (apply CLI override if provided)
-    let port = cli.port.unwrap_or(config.server.port);
-    if let Err(e) = Config::validate_port(port) {
+    // Validate port (overrides already applied to config)
+    if let Err(e) = Config::validate_port(config.server.port) {
         errors.push(format!("Invalid port: {}", e));
     }
 
@@ -171,6 +218,15 @@ fn dry_run(config: &Config, cli: &Cli) -> Result<()> {
         };
         let regex_result = regex::Regex::new(&converted_pattern);
 
+        let is_valid = conversion_error.is_none() && regex_result.is_ok();
+        if !is_valid {
+            errors.push(format!(
+                "Rule {} is invalid (pattern: {})",
+                i + 1,
+                rule.pattern
+            ));
+        }
+
         let rule_info = serde_json::json!({
             "index": i + 1,
             "pattern": rule.pattern,
@@ -179,7 +235,7 @@ fn dry_run(config: &Config, cli: &Cli) -> Result<()> {
             "type": rule.r#type,
             "help": rule.help,
             "labels": rule.labels,
-            "valid": conversion_error.is_none() && regex_result.is_ok(),
+            "valid": is_valid,
             "conversion_error": conversion_error,
             "regex_error": regex_result.as_ref().err().map(|e| e.to_string())
         });
@@ -204,8 +260,10 @@ fn dry_run(config: &Config, cli: &Cli) -> Result<()> {
             println!("Configuration:");
             println!("  Config file: {}", cli.config.display());
             println!("  Jolokia URL: {}", config.jolokia.url);
-            println!("  Server port: {}", port);
+            println!("  Server port: {}", config.server.port);
+            println!("  Bind address: {}", config.server.bind_address);
             println!("  Metrics path: {}", config.server.path);
+            println!("  TLS enabled: {}", config.server.tls.enabled);
 
             if !errors.is_empty() {
                 println!();
@@ -253,8 +311,10 @@ fn dry_run(config: &Config, cli: &Cli) -> Result<()> {
                 "status": "dry_run_completed",
                 "config_file": cli.config.display().to_string(),
                 "jolokia_url": config.jolokia.url,
-                "server_port": port,
+                "server_port": config.server.port,
+                "bind_address": config.server.bind_address,
                 "metrics_path": config.server.path,
+                "tls_enabled": config.server.tls.enabled,
                 "rules_count": config.rules.len(),
                 "valid_rules_count": valid_count,
                 "rules": compiled_rules,
@@ -267,8 +327,10 @@ fn dry_run(config: &Config, cli: &Cli) -> Result<()> {
                 "status": "dry_run_completed",
                 "config_file": cli.config.display().to_string(),
                 "jolokia_url": config.jolokia.url,
-                "server_port": port,
+                "server_port": config.server.port,
+                "bind_address": config.server.bind_address,
                 "metrics_path": config.server.path,
+                "tls_enabled": config.server.tls.enabled,
                 "rules_count": config.rules.len(),
                 "valid_rules_count": valid_count,
                 "rules": compiled_rules,

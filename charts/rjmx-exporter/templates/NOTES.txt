@@ -1,0 +1,31 @@
+Thank you for installing {{ .Chart.Name }}!
+
+Your release is named: {{ .Release.Name }}
+
+To get the application URL, run:
+{{- if contains "NodePort" .Values.service.type }}
+  export NODE_PORT=$(kubectl get --namespace {{ .Release.Namespace }} -o jsonpath="{.spec.ports[0].nodePort}" services {{ include "rjmx-exporter.fullname" . }})
+  export NODE_IP=$(kubectl get nodes --namespace {{ .Release.Namespace }} -o jsonpath="{.items[0].status.addresses[0].address}")
+  echo "Metrics URL: http://$NODE_IP:$NODE_PORT{{ .Values.config.server.path }}"
+  echo "Health URL: http://$NODE_IP:$NODE_PORT/health"
+{{- else if contains "LoadBalancer" .Values.service.type }}
+  NOTE: It may take a few minutes for the LoadBalancer IP to be available.
+  Watch the status with: kubectl get --namespace {{ .Release.Namespace }} svc -w {{ include "rjmx-exporter.fullname" . }}
+
+  export SERVICE_IP=$(kubectl get svc --namespace {{ .Release.Namespace }} {{ include "rjmx-exporter.fullname" . }} --template "{{"{{ range (index .status.loadBalancer.ingress 0) }}{{.}}{{ end }}"}}")
+  echo "Metrics URL: http://$SERVICE_IP:{{ .Values.service.port }}{{ .Values.config.server.path }}"
+  echo "Health URL: http://$SERVICE_IP:{{ .Values.service.port }}/health"
+{{- else if contains "ClusterIP" .Values.service.type }}
+  kubectl --namespace {{ .Release.Namespace }} port-forward svc/{{ include "rjmx-exporter.fullname" . }} {{ .Values.service.port }}:{{ .Values.service.port }}
+
+  Then access:
+  - Metrics: http://127.0.0.1:{{ .Values.service.port }}{{ .Values.config.server.path }}
+  - Health:  http://127.0.0.1:{{ .Values.service.port }}/health
+{{- end }}
+
+Configuration:
+  - Metrics path: {{ .Values.config.server.path }}
+  - Targets configured: {{ len .Values.config.targets }}
+  - Rules configured: {{ len .Values.config.rules }}
+
+For more information, visit: https://github.com/jsoonworld/rJMX-Exporter

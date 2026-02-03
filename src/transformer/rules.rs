@@ -67,6 +67,8 @@ pub enum MetricType {
     Gauge,
     /// Counter metric - a monotonically increasing value
     Counter,
+    /// Histogram metric - observations counted in buckets
+    Histogram,
     /// Untyped metric - type is not specified
     #[default]
     Untyped,
@@ -82,12 +84,14 @@ impl MetricType {
     ///
     /// assert_eq!(MetricType::Gauge.as_str(), "gauge");
     /// assert_eq!(MetricType::Counter.as_str(), "counter");
+    /// assert_eq!(MetricType::Histogram.as_str(), "histogram");
     /// assert_eq!(MetricType::Untyped.as_str(), "untyped");
     /// ```
     pub fn as_str(&self) -> &'static str {
         match self {
             MetricType::Gauge => "gauge",
             MetricType::Counter => "counter",
+            MetricType::Histogram => "histogram",
             MetricType::Untyped => "untyped",
         }
     }
@@ -111,9 +115,10 @@ impl<'de> Deserialize<'de> for MetricType {
         match s.to_lowercase().as_str() {
             "gauge" => Ok(MetricType::Gauge),
             "counter" => Ok(MetricType::Counter),
+            "histogram" => Ok(MetricType::Histogram),
             "untyped" => Ok(MetricType::Untyped),
             other => Err(serde::de::Error::custom(format!(
-                "unknown metric type '{}', expected one of: gauge, counter, untyped",
+                "unknown metric type '{}', expected one of: gauge, counter, histogram, untyped",
                 other
             ))),
         }
@@ -278,6 +283,11 @@ impl Rule {
     /// Get the compiled regex if already compiled, without attempting compilation
     pub fn get_compiled(&self) -> Option<&Regex> {
         self.compiled_pattern.get()
+    }
+
+    /// Check if the rule pattern has been compiled
+    pub fn is_compiled(&self) -> bool {
+        self.compiled_pattern.get().is_some()
     }
 
     /// Check if the rule matches the given input string
@@ -602,6 +612,11 @@ impl RuleSet {
     /// Iterate over all rules
     pub fn iter(&self) -> impl Iterator<Item = &Rule> {
         self.rules.iter()
+    }
+
+    /// Get a reference to the underlying rules vector
+    pub fn rules(&self) -> &[Rule] {
+        &self.rules
     }
 
     /// Get a rule by index

@@ -29,7 +29,7 @@ services:
 
   # Prometheus for testing (optional)
   prometheus:
-    image: prom/prometheus:latest
+    image: prom/prometheus:v2.48.0
     container_name: rjmx-prometheus
     ports:
       - "9091:9090"

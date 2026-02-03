@@ -1,0 +1,77 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: rjmx-exporter-config
+  labels:
+    app: rjmx-exporter
+    app.kubernetes.io/name: rjmx-exporter
+    app.kubernetes.io/component: metrics-exporter
+data:
+  config.yaml: |
+    # rJMX-Exporter Configuration
+    # Customize this configuration for your environment
+
+    # Jolokia endpoint configuration
+    jolokia:
+      # Replace with your Java application's Jolokia endpoint
+      # In Kubernetes, this is typically a service DNS name
+      url: "http://java-app:8778/jolokia"
+      # Authentication is handled via environment variables from secret:
+      # JOLOKIA_USERNAME and JOLOKIA_PASSWORD
+      timeout_ms: 5000
+
+    # HTTP server configuration
+    server:
+      port: 9090
+      path: "/metrics"
+      bind_address: "0.0.0.0"
+
+    # Metric transformation rules
+    rules:
+      # JVM Memory metrics
+      - pattern: 'java.lang<type=Memory><HeapMemoryUsage>(\w+)'
+        name: "jvm_memory_heap_$1_bytes"
+        type: gauge
+        help: "JVM heap memory usage"
+
+      - pattern: 'java.lang<type=Memory><NonHeapMemoryUsage>(\w+)'
+        name: "jvm_memory_nonheap_$1_bytes"
+        type: gauge
+        help: "JVM non-heap memory usage"
+
+      # JVM Thread metrics
+      - pattern: 'java.lang<type=Threading><(\w+)>'
+        name: "jvm_threads_$1"
+        type: gauge
+        help: "JVM thread metrics"
+
+      # JVM GC metrics
+      - pattern: "java.lang<type=GarbageCollector,name=([^>]+)><CollectionCount>"
+        name: "jvm_gc_collection_count"
+        type: counter
+        help: "JVM garbage collection count"
+        labels:
+          gc: "$1"
+
+      - pattern: "java.lang<type=GarbageCollector,name=([^>]+)><CollectionTime>"
+        name: "jvm_gc_collection_time_ms"
+        type: counter
+        help: "JVM garbage collection time in milliseconds"
+        labels:
+          gc: "$1"
+
+      # JVM ClassLoading metrics
+      - pattern: 'java.lang<type=ClassLoading><LoadedClassCount>'
+        name: "jvm_classes_loaded"
+        type: gauge
+        help: "Number of classes currently loaded"
+
+      - pattern: 'java.lang<type=ClassLoading><TotalLoadedClassCount>'
+        name: "jvm_classes_loaded_total"
+        type: counter
+        help: "Total number of classes loaded since JVM start"
+
+      - pattern: 'java.lang<type=ClassLoading><UnloadedClassCount>'
+        name: "jvm_classes_unloaded_total"
+        type: counter
+        help: "Total number of classes unloaded since JVM start"
