@@ -120,6 +120,19 @@ serviceMonitor:
   namespace: ""
   interval: 30s
   scrapeTimeout: 10s
+  # Scheme for scraping metrics (http or https)
+  scheme: http
+  # TLS configuration for HTTPS scraping
+  # Example:
+  #   tlsConfig:
+  #     insecureSkipVerify: true
+  # Or with CA certificate:
+  #   tlsConfig:
+  #     ca:
+  #       secret:
+  #         name: my-ca-secret
+  #         key: ca.crt
+  tlsConfig: {}
   labels: {}
   annotations: {}
 

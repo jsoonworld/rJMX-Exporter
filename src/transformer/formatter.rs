@@ -66,33 +66,59 @@ impl PrometheusFormatter {
     /// - HELP and TYPE lines are emitted once per unique metric name
     /// - Labels are sorted alphabetically for deterministic output
     /// - Metrics with the same name are grouped together
+    /// - Histogram metrics are grouped by base name (without _bucket/_sum/_count suffixes)
     pub fn format(&self, metrics: &[PrometheusMetric]) -> String {
+        use crate::transformer::rules::MetricType;
+
         if metrics.is_empty() {
             return String::new();
         }
 
         let mut output = String::with_capacity(metrics.len() * 100);
         let mut seen_metrics: HashSet<String> = HashSet::new();
+        let mut seen_histogram_bases: HashSet<String> = HashSet::new();
 
         // Group metrics by name for proper HELP/TYPE ordering
         let grouped = Self::group_by_name(metrics);
 
         for (name, group) in grouped {
-            // HELP/TYPE are emitted once per metric name
-            if !seen_metrics.contains(&name) {
-                seen_metrics.insert(name.clone());
+            let is_histogram = group[0].metric_type == MetricType::Histogram;
 
-                // HELP line
-                if let Some(help) = &group[0].help {
-                    output.push_str(&format!("# HELP {} {}\n", name, Self::escape_help(help)));
+            if is_histogram {
+                // For histogram metrics, emit HELP/TYPE for the base name only
+                let base_name = Self::get_histogram_base_name(&name);
+                if !seen_histogram_bases.contains(&base_name) {
+                    seen_histogram_bases.insert(base_name.clone());
+
+                    // HELP line
+                    if let Some(help) = &group[0].help {
+                        output.push_str(&format!(
+                            "# HELP {} {}\n",
+                            base_name,
+                            Self::escape_help(help)
+                        ));
+                    }
+
+                    // TYPE line with histogram type
+                    output.push_str(&format!("# TYPE {} histogram\n", base_name));
                 }
+            } else {
+                // Non-histogram metrics: HELP/TYPE are emitted once per metric name
+                if !seen_metrics.contains(&name) {
+                    seen_metrics.insert(name.clone());
 
-                // TYPE line
-                output.push_str(&format!(
-                    "# TYPE {} {}\n",
-                    name,
-                    group[0].metric_type.as_str()
-                ));
+                    // HELP line
+                    if let Some(help) = &group[0].help {
+                        output.push_str(&format!("# HELP {} {}\n", name, Self::escape_help(help)));
+                    }
+
+                    // TYPE line
+                    output.push_str(&format!(
+                        "# TYPE {} {}\n",
+                        name,
+                        group[0].metric_type.as_str()
+                    ));
+                }
             }
 
             // Metric lines
@@ -103,6 +129,19 @@ impl PrometheusFormatter {
         }
 
         output
+    }
+
+    /// Get the base name for histogram metrics by removing suffixes
+    fn get_histogram_base_name(name: &str) -> String {
+        if let Some(base) = name.strip_suffix("_bucket") {
+            base.to_string()
+        } else if let Some(base) = name.strip_suffix("_sum") {
+            base.to_string()
+        } else if let Some(base) = name.strip_suffix("_count") {
+            base.to_string()
+        } else {
+            name.to_string()
+        }
     }
 
     /// Group metrics by name, preserving order of first occurrence

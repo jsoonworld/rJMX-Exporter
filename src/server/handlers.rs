@@ -17,6 +17,30 @@ use super::AppState;
 use crate::metrics::internal_metrics;
 use crate::transformer::PrometheusFormatter;
 
+/// Sanitize URL for use in metric labels by removing credentials
+///
+/// Converts URLs like "http://user:pass@host:port/path" to "host:port"
+fn sanitize_url_for_label(url: &str) -> String {
+    // Try to parse as URL and extract host:port
+    if let Ok(parsed) = url::Url::parse(url) {
+        let host = parsed.host_str().unwrap_or("unknown");
+        if let Some(port) = parsed.port() {
+            format!("{}:{}", host, port)
+        } else {
+            host.to_string()
+        }
+    } else {
+        // Fallback: try simple string manipulation
+        // Remove scheme and extract after '@' if present
+        let without_scheme = url
+            .trim_start_matches("http://")
+            .trim_start_matches("https://");
+        let after_at = without_scheme.rsplit('@').next().unwrap_or(without_scheme);
+        // Take only host:port part (before any path)
+        after_at.split('/').next().unwrap_or(after_at).to_string()
+    }
+}
+
 /// Health check response
 #[derive(Serialize)]
 pub struct HealthResponse {
@@ -74,7 +98,8 @@ pub async fn metrics(State(state): State<AppState>) -> impl IntoResponse {
     let metrics_registry = internal_metrics();
 
     // Get target name from config for metrics labeling
-    let target_name = &state.config.jolokia.url;
+    // Sanitize URL to remove credentials (user:pass@host -> host)
+    let target_name = sanitize_url_for_label(&state.config.jolokia.url);
 
     // Determine which MBeans to collect
     let mbeans_to_collect: Vec<String> = if !state.config.whitelist_object_names.is_empty() {
@@ -154,9 +179,9 @@ pub async fn metrics(State(state): State<AppState>) -> impl IntoResponse {
 
     // Record internal metrics for this scrape
     if errors.is_empty() {
-        metrics_registry.record_scrape_success(target_name, scrape_duration);
+        metrics_registry.record_scrape_success(&target_name, scrape_duration);
     } else {
-        metrics_registry.record_scrape_failure(target_name, scrape_duration);
+        metrics_registry.record_scrape_failure(&target_name, scrape_duration);
     }
 
     // Add exporter info metrics

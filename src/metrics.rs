@@ -460,6 +460,8 @@ impl InternalMetrics {
                 );
 
                 // Scrape duration histogram
+                // Note: Histogram metrics use the base name with _bucket/_sum/_count suffixes
+                // The formatter will group these and emit a single "# TYPE ... histogram" line
                 let histogram = &target_metrics.scrape_duration_seconds;
                 for (bound, count) in histogram.get_buckets() {
                     let le = if bound.is_infinite() {
@@ -469,7 +471,7 @@ impl InternalMetrics {
                     };
                     metrics.push(
                         PrometheusMetric::new("rjmx_scrape_duration_seconds_bucket", count as f64)
-                            .with_type(MetricType::Gauge)
+                            .with_type(MetricType::Histogram)
                             .with_help("Histogram of scrape durations")
                             .with_label("target", target)
                             .with_label("le", &le),
@@ -477,8 +479,8 @@ impl InternalMetrics {
                 }
                 metrics.push(
                     PrometheusMetric::new("rjmx_scrape_duration_seconds_sum", histogram.get_sum())
-                        .with_type(MetricType::Gauge)
-                        .with_help("Total sum of scrape durations")
+                        .with_type(MetricType::Histogram)
+                        .with_help("Histogram of scrape durations")
                         .with_label("target", target),
                 );
                 metrics.push(
@@ -486,8 +488,8 @@ impl InternalMetrics {
                         "rjmx_scrape_duration_seconds_count",
                         histogram.get_count() as f64,
                     )
-                    .with_type(MetricType::Gauge)
-                    .with_help("Total count of scrapes")
+                    .with_type(MetricType::Histogram)
+                    .with_help("Histogram of scrape durations")
                     .with_label("target", target),
                 );
             }

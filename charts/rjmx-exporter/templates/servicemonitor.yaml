@@ -21,6 +21,11 @@ spec:
       {{- include "rjmx-exporter.selectorLabels" . | nindent 6 }}
   endpoints:
     - port: http
+      scheme: {{ .Values.serviceMonitor.scheme | default "http" }}
+      {{- with .Values.serviceMonitor.tlsConfig }}
+      tlsConfig:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       path: {{ .Values.config.server.path }}
       interval: {{ .Values.serviceMonitor.interval }}
       scrapeTimeout: {{ .Values.serviceMonitor.scrapeTimeout }}

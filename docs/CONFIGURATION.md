@@ -142,3 +142,37 @@ domain<key1=value1,key2=value2><attribute>subattribute
 | `RJMX_PORT` | Override server port |
 | `RJMX_LOG_LEVEL` | Log level (trace, debug, info, warn, error) |
 | `RUST_LOG` | Rust logging filter |
+| `RJMX_TLS_ENABLED` | Enable TLS (true/false) |
+| `RJMX_TLS_CERT_FILE` | Path to TLS certificate file (PEM format) |
+| `RJMX_TLS_KEY_FILE` | Path to TLS private key file (PEM format) |
+
+## TLS Configuration
+
+rJMX-Exporter supports HTTPS for secure metrics exposure.
+
+### CLI Options
+
+```bash
+rjmx-exporter --config config.yaml \
+  --tls-enabled \
+  --tls-cert-file /path/to/cert.pem \
+  --tls-key-file /path/to/key.pem
+```
+
+### Configuration File
+
+```yaml
+server:
+  port: 9090
+  path: "/metrics"
+  tls:
+    enabled: true
+    cert_file: "/path/to/cert.pem"
+    key_file: "/path/to/key.pem"
+```
+
+### Requirements
+
+- Both `cert_file` and `key_file` are required when TLS is enabled
+- Certificate and key must be in PEM format
+- The certificate chain should include intermediate certificates if needed

@@ -180,22 +180,16 @@ async fn run_https_server(
         .as_ref()
         .ok_or_else(|| anyhow::anyhow!("TLS key_file is required when TLS is enabled"))?;
 
-    // Validate that certificate files exist
+    // Validate that certificate files exist (using async I/O)
     let cert_path = Path::new(cert_file);
     let key_path = Path::new(key_file);
 
-    if !cert_path.exists() {
-        return Err(anyhow::anyhow!(
-            "TLS certificate file not found: {}",
-            cert_file
-        ));
-    }
-    if !key_path.exists() {
-        return Err(anyhow::anyhow!(
-            "TLS private key file not found: {}",
-            key_file
-        ));
-    }
+    tokio::fs::metadata(cert_path)
+        .await
+        .map_err(|_| anyhow::anyhow!("TLS certificate file not found: {}", cert_file))?;
+    tokio::fs::metadata(key_path)
+        .await
+        .map_err(|_| anyhow::anyhow!("TLS private key file not found: {}", key_file))?;
 
     // Load TLS configuration
     let rustls_config = RustlsConfig::from_pem_file(cert_path, key_path)

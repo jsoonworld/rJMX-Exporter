@@ -19,7 +19,7 @@ resources:
 commonLabels:
   app.kubernetes.io/name: rjmx-exporter
   app.kubernetes.io/instance: rjmx-exporter
-  app.kubernetes.io/version: "0.1.0"
+  app.kubernetes.io/version: "0.2.0"
   app.kubernetes.io/part-of: monitoring
 
 # Uncomment and customize for different environments
