@@ -109,7 +109,7 @@ jobs:
           Get-FileHash rjmx-exporter-${{ matrix.name }}.zip -Algorithm SHA256 | Format-List > rjmx-exporter-${{ matrix.name }}.zip.sha256
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: rjmx-exporter-${{ matrix.name }}
           path: |
