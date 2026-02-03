@@ -143,9 +143,9 @@ rjmx_exporter_info{{version="{}"}} 1
 # HELP rjmx_exporter_scrape_duration_seconds Time spent scraping metrics
 # TYPE rjmx_exporter_scrape_duration_seconds gauge
 rjmx_exporter_scrape_duration_seconds {}
-# HELP rjmx_exporter_scrape_errors_total Number of errors during scrape
-# TYPE rjmx_exporter_scrape_errors_total counter
-rjmx_exporter_scrape_errors_total {}
+# HELP rjmx_exporter_scrape_errors Number of errors during last scrape
+# TYPE rjmx_exporter_scrape_errors gauge
+rjmx_exporter_scrape_errors {}
 # HELP rjmx_exporter_metrics_scraped Number of metrics scraped
 # TYPE rjmx_exporter_metrics_scraped gauge
 rjmx_exporter_metrics_scraped {}

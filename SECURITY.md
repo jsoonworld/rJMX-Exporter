@@ -16,15 +16,13 @@ We take security vulnerabilities seriously. If you discover a security issue, pl
 
 ### How to Report
 
-**Preferred Method: GitHub Security Advisories**
+**Method: GitHub Security Advisories**
 
 1. Navigate to the [Security Advisories](https://github.com/jsoonworld/rJMX-Exporter/security/advisories) page
 2. Click "Report a vulnerability"
 3. Fill out the advisory form with details about the vulnerability
 
-**Alternative: Email**
-
-If you are unable to use GitHub Security Advisories, you may report vulnerabilities via email to the project maintainers. Please include `[SECURITY]` in the subject line.
+> **Note:** GitHub Security Advisories is our only supported reporting channel. This ensures secure, private communication and allows us to coordinate fixes before public disclosure.
 
 ### What to Include in Your Report
 
