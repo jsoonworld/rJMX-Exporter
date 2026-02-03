@@ -1,6 +1,6 @@
 # rJMX-Exporter Design Document
 
-> **Status: Phase 3 Transform Engine implemented (as of 2026-02-02)** - Phase 4 (Validation) next.
+> **Status: Phase 3 Complete (v0.1.0)** - All core features implemented. Ready for production testing.
 
 ## 1. Overview
 
@@ -180,22 +180,25 @@ rjmx-exporter --dry-run -c config.yaml
 ## 10. Roadmap
 
 ### Phase 1: Foundation
-- [ ] Create Rust project structure (Cargo.toml, src/)
-- [ ] Basic Tokio + Axum server
-- [ ] Sample Java app + Jolokia Docker environment
+- [x] Create Rust project structure (Cargo.toml, src/)
+- [x] Basic Tokio + Axum server
+- [x] Sample Java app + Jolokia Docker environment
 
 ### Phase 2: Data Collection
-- [ ] Parse Jolokia JSON responses
-- [ ] Define MBean data structures
+- [x] Jolokia HTTP client with connection pooling
+- [x] Parse Jolokia JSON responses
+- [x] Define MBean data structures
 
 ### Phase 3: Transform Engine
-- [ ] YAML rule parser
-- [ ] Regex-based metric name transformation
-- [ ] Prometheus text format output
+- [x] YAML rule parser with jmx_exporter compatibility
+- [x] Regex-based metric name transformation
+- [x] Prometheus text format output
+- [x] Dynamic label extraction from capture groups
+- [x] Whitelist/blacklist MBean filtering
 
 ### Phase 4: Validation
 - [ ] Benchmark resource usage vs Java version
-- [ ] Integration tests
+- [ ] Load testing with large MBean sets
 
 ## 11. Repository Structure (Planned)
 
