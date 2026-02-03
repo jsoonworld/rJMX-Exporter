@@ -90,6 +90,26 @@ pub struct ServerConfig {
     /// - "localhost" (maps to 127.0.0.1)
     #[serde(default = "default_bind_address")]
     pub bind_address: String,
+
+    /// TLS configuration for HTTPS support
+    #[serde(default)]
+    pub tls: TlsConfig,
+}
+
+/// TLS configuration for HTTPS support
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct TlsConfig {
+    /// Enable TLS/HTTPS (default: false)
+    #[serde(default)]
+    pub enabled: bool,
+
+    /// Path to the TLS certificate file (PEM format)
+    #[serde(default)]
+    pub cert_file: Option<String>,
+
+    /// Path to the TLS private key file (PEM format)
+    #[serde(default)]
+    pub key_file: Option<String>,
 }
 
 /// Metric transformation rule
@@ -164,8 +184,43 @@ impl Default for ServerConfig {
             port: default_port(),
             path: default_metrics_path(),
             bind_address: default_bind_address(),
+            tls: TlsConfig::default(),
         }
     }
+}
+
+/// Configuration overrides from CLI arguments and environment variables
+///
+/// These are applied on top of config file values.
+/// Fields are Option to indicate "no override" vs "explicit override".
+///
+/// The precedence order is:
+/// 1. CLI arguments (highest priority)
+/// 2. Environment variables
+/// 3. Configuration file
+/// 4. Default values (lowest priority)
+#[derive(Debug, Clone, Default)]
+pub struct ConfigOverrides {
+    /// Server port override
+    pub port: Option<u16>,
+    /// Server bind address override
+    pub bind_address: Option<String>,
+    /// Metrics endpoint path override
+    pub metrics_path: Option<String>,
+    /// Jolokia URL override
+    pub jolokia_url: Option<String>,
+    /// Jolokia timeout override (milliseconds)
+    pub jolokia_timeout: Option<u64>,
+    /// Jolokia username override
+    pub username: Option<String>,
+    /// Jolokia password override
+    pub password: Option<String>,
+    /// TLS enabled override
+    pub tls_enabled: Option<bool>,
+    /// TLS certificate file path override
+    pub tls_cert_file: Option<String>,
+    /// TLS private key file path override
+    pub tls_key_file: Option<String>,
 }
 
 impl Config {
@@ -211,6 +266,105 @@ impl Config {
         }
     }
 
+    /// Apply overrides from CLI/environment variables
+    ///
+    /// This method modifies the config in-place, applying any overrides
+    /// that are set (Some values). The precedence is:
+    /// CLI args > Env vars > Config file > Defaults
+    ///
+    /// Note: clap handles CLI > Env precedence automatically when using
+    /// the `env` attribute, so by the time we receive ConfigOverrides,
+    /// the correct precedence is already applied.
+    pub fn apply_overrides(&mut self, overrides: &ConfigOverrides) {
+        if let Some(port) = overrides.port {
+            tracing::debug!(port, "Applying port override");
+            self.server.port = port;
+        }
+
+        if let Some(ref bind_address) = overrides.bind_address {
+            tracing::debug!(bind_address, "Applying bind_address override");
+            self.server.bind_address = bind_address.clone();
+        }
+
+        if let Some(ref metrics_path) = overrides.metrics_path {
+            tracing::debug!(metrics_path, "Applying metrics_path override");
+            self.server.path = metrics_path.clone();
+        }
+
+        if let Some(ref jolokia_url) = overrides.jolokia_url {
+            tracing::debug!(jolokia_url, "Applying jolokia_url override");
+            self.jolokia.url = jolokia_url.clone();
+        }
+
+        if let Some(timeout) = overrides.jolokia_timeout {
+            tracing::debug!(timeout_ms = timeout, "Applying jolokia_timeout override");
+            self.jolokia.timeout_ms = timeout;
+        }
+
+        if let Some(ref username) = overrides.username {
+            tracing::debug!("Applying username override");
+            self.jolokia.username = Some(username.clone());
+        }
+
+        if let Some(ref password) = overrides.password {
+            tracing::debug!("Applying password override");
+            self.jolokia.password = Some(password.clone());
+        }
+
+        if let Some(tls_enabled) = overrides.tls_enabled {
+            tracing::debug!(tls_enabled, "Applying tls_enabled override");
+            self.server.tls.enabled = tls_enabled;
+        }
+
+        if let Some(ref tls_cert_file) = overrides.tls_cert_file {
+            tracing::debug!(tls_cert_file, "Applying tls_cert_file override");
+            self.server.tls.cert_file = Some(tls_cert_file.clone());
+        }
+
+        if let Some(ref tls_key_file) = overrides.tls_key_file {
+            tracing::debug!(tls_key_file, "Applying tls_key_file override");
+            self.server.tls.key_file = Some(tls_key_file.clone());
+        }
+    }
+
+    /// Validate the final configuration after all overrides are applied
+    ///
+    /// This performs validation that was skipped in the initial load
+    /// because CLI/env overrides may change values.
+    pub fn validate_final(&self) -> Result<(), ConfigError> {
+        // Validate port
+        Self::validate_port(self.server.port)?;
+
+        // Validate metrics path (in case it was overridden)
+        if !self.server.path.starts_with('/') {
+            return Err(ConfigError::ValidationError(
+                "Metrics path must start with '/'".to_string(),
+            ));
+        }
+
+        if self.server.path == "/" || self.server.path == "/health" {
+            return Err(ConfigError::ValidationError(
+                "Metrics path must not conflict with '/' or '/health'".to_string(),
+            ));
+        }
+
+        // Validate TLS configuration
+        if self.server.tls.enabled {
+            if self.server.tls.cert_file.is_none() {
+                return Err(ConfigError::ValidationError(
+                    "TLS is enabled but cert_file is not specified".to_string(),
+                ));
+            }
+            if self.server.tls.key_file.is_none() {
+                return Err(ConfigError::ValidationError(
+                    "TLS is enabled but key_file is not specified".to_string(),
+                ));
+            }
+        }
+
+        Ok(())
+    }
+
     /// Validate the configuration
     ///
     /// Note: Port validation is intentionally NOT done here because CLI arguments
@@ -227,6 +381,20 @@ impl Config {
             return Err(ConfigError::ValidationError(
                 "Metrics path must not conflict with '/' or '/health'".to_string(),
             ));
+        }
+
+        // Validate TLS configuration
+        if self.server.tls.enabled {
+            if self.server.tls.cert_file.is_none() {
+                return Err(ConfigError::ValidationError(
+                    "TLS is enabled but cert_file is not specified".to_string(),
+                ));
+            }
+            if self.server.tls.key_file.is_none() {
+                return Err(ConfigError::ValidationError(
+                    "TLS is enabled but key_file is not specified".to_string(),
+                ));
+            }
         }
 
         // Validate rule patterns are valid regex
@@ -328,5 +496,305 @@ rules:
         assert_eq!(config.rules.len(), 1);
         assert_eq!(config.rules[0].value, Some("$1".to_string()));
         assert_eq!(config.rules[0].value_factor, Some(1.0));
+    }
+
+    #[test]
+    fn test_tls_config_default() {
+        let config = TlsConfig::default();
+        assert!(!config.enabled);
+        assert!(config.cert_file.is_none());
+        assert!(config.key_file.is_none());
+    }
+
+    #[test]
+    fn test_tls_config_enabled_without_cert() {
+        let yaml = r#"
+server:
+  tls:
+    enabled: true
+"#;
+        let config: Config = serde_yaml::from_str(yaml).unwrap();
+        assert!(config.validate().is_err());
+    }
+
+    #[test]
+    fn test_tls_config_enabled_without_key() {
+        let yaml = r#"
+server:
+  tls:
+    enabled: true
+    cert_file: "/path/to/cert.pem"
+"#;
+        let config: Config = serde_yaml::from_str(yaml).unwrap();
+        assert!(config.validate().is_err());
+    }
+
+    #[test]
+    fn test_tls_config_valid() {
+        let yaml = r#"
+server:
+  tls:
+    enabled: true
+    cert_file: "/path/to/cert.pem"
+    key_file: "/path/to/key.pem"
+"#;
+        let config: Config = serde_yaml::from_str(yaml).unwrap();
+        assert!(config.validate().is_ok());
+        assert!(config.server.tls.enabled);
+        assert_eq!(
+            config.server.tls.cert_file,
+            Some("/path/to/cert.pem".to_string())
+        );
+        assert_eq!(
+            config.server.tls.key_file,
+            Some("/path/to/key.pem".to_string())
+        );
+    }
+
+    #[test]
+    fn test_tls_config_disabled_no_files_required() {
+        let yaml = r#"
+server:
+  tls:
+    enabled: false
+"#;
+        let config: Config = serde_yaml::from_str(yaml).unwrap();
+        assert!(config.validate().is_ok());
+        assert!(!config.server.tls.enabled);
+    }
+
+    #[test]
+    fn test_apply_tls_overrides() {
+        let mut config = Config::default();
+        assert!(!config.server.tls.enabled);
+        assert!(config.server.tls.cert_file.is_none());
+        assert!(config.server.tls.key_file.is_none());
+
+        let overrides = ConfigOverrides {
+            tls_enabled: Some(true),
+            tls_cert_file: Some("/path/to/cert.pem".to_string()),
+            tls_key_file: Some("/path/to/key.pem".to_string()),
+            ..Default::default()
+        };
+
+        config.apply_overrides(&overrides);
+
+        assert!(config.server.tls.enabled);
+        assert_eq!(
+            config.server.tls.cert_file,
+            Some("/path/to/cert.pem".to_string())
+        );
+        assert_eq!(
+            config.server.tls.key_file,
+            Some("/path/to/key.pem".to_string())
+        );
+    }
+
+    #[test]
+    fn test_validate_final_with_tls() {
+        let mut config = Config::default();
+        config.server.tls.enabled = true;
+        config.server.tls.cert_file = Some("/path/to/cert.pem".to_string());
+        config.server.tls.key_file = Some("/path/to/key.pem".to_string());
+
+        assert!(config.validate_final().is_ok());
+    }
+
+    #[test]
+    fn test_validate_final_tls_missing_cert() {
+        let mut config = Config::default();
+        config.server.tls.enabled = true;
+        config.server.tls.key_file = Some("/path/to/key.pem".to_string());
+
+        assert!(config.validate_final().is_err());
+    }
+
+    #[test]
+    fn test_validate_final_tls_missing_key() {
+        let mut config = Config::default();
+        config.server.tls.enabled = true;
+        config.server.tls.cert_file = Some("/path/to/cert.pem".to_string());
+
+        assert!(config.validate_final().is_err());
+    }
+
+    #[test]
+    fn test_config_overrides_default() {
+        let overrides = ConfigOverrides::default();
+        assert!(overrides.port.is_none());
+        assert!(overrides.bind_address.is_none());
+        assert!(overrides.metrics_path.is_none());
+        assert!(overrides.jolokia_url.is_none());
+        assert!(overrides.jolokia_timeout.is_none());
+        assert!(overrides.username.is_none());
+        assert!(overrides.password.is_none());
+        assert!(overrides.tls_enabled.is_none());
+        assert!(overrides.tls_cert_file.is_none());
+        assert!(overrides.tls_key_file.is_none());
+    }
+
+    #[test]
+    fn test_apply_overrides_port() {
+        let mut config = Config::default();
+        assert_eq!(config.server.port, 9090);
+
+        let overrides = ConfigOverrides {
+            port: Some(8080),
+            ..Default::default()
+        };
+        config.apply_overrides(&overrides);
+        assert_eq!(config.server.port, 8080);
+    }
+
+    #[test]
+    fn test_apply_overrides_bind_address() {
+        let mut config = Config::default();
+        assert_eq!(config.server.bind_address, "0.0.0.0");
+
+        let overrides = ConfigOverrides {
+            bind_address: Some("127.0.0.1".to_string()),
+            ..Default::default()
+        };
+        config.apply_overrides(&overrides);
+        assert_eq!(config.server.bind_address, "127.0.0.1");
+    }
+
+    #[test]
+    fn test_apply_overrides_metrics_path() {
+        let mut config = Config::default();
+        assert_eq!(config.server.path, "/metrics");
+
+        let overrides = ConfigOverrides {
+            metrics_path: Some("/custom-metrics".to_string()),
+            ..Default::default()
+        };
+        config.apply_overrides(&overrides);
+        assert_eq!(config.server.path, "/custom-metrics");
+    }
+
+    #[test]
+    fn test_apply_overrides_jolokia_url() {
+        let mut config = Config::default();
+        assert_eq!(config.jolokia.url, "http://localhost:8778/jolokia");
+
+        let overrides = ConfigOverrides {
+            jolokia_url: Some("http://example.com:9999/jolokia".to_string()),
+            ..Default::default()
+        };
+        config.apply_overrides(&overrides);
+        assert_eq!(config.jolokia.url, "http://example.com:9999/jolokia");
+    }
+
+    #[test]
+    fn test_apply_overrides_jolokia_timeout() {
+        let mut config = Config::default();
+        assert_eq!(config.jolokia.timeout_ms, 5000);
+
+        let overrides = ConfigOverrides {
+            jolokia_timeout: Some(10000),
+            ..Default::default()
+        };
+        config.apply_overrides(&overrides);
+        assert_eq!(config.jolokia.timeout_ms, 10000);
+    }
+
+    #[test]
+    fn test_apply_overrides_credentials() {
+        let mut config = Config::default();
+        assert!(config.jolokia.username.is_none());
+        assert!(config.jolokia.password.is_none());
+
+        let overrides = ConfigOverrides {
+            username: Some("admin".to_string()),
+            password: Some("secret".to_string()),
+            ..Default::default()
+        };
+        config.apply_overrides(&overrides);
+        assert_eq!(config.jolokia.username, Some("admin".to_string()));
+        assert_eq!(config.jolokia.password, Some("secret".to_string()));
+    }
+
+    #[test]
+    fn test_apply_overrides_all() {
+        let mut config = Config::default();
+
+        let overrides = ConfigOverrides {
+            port: Some(8080),
+            bind_address: Some("127.0.0.1".to_string()),
+            metrics_path: Some("/custom-metrics".to_string()),
+            jolokia_url: Some("http://example.com:9999/jolokia".to_string()),
+            jolokia_timeout: Some(15000),
+            username: Some("user".to_string()),
+            password: Some("pass".to_string()),
+            tls_enabled: Some(true),
+            tls_cert_file: Some("/path/to/cert.pem".to_string()),
+            tls_key_file: Some("/path/to/key.pem".to_string()),
+        };
+        config.apply_overrides(&overrides);
+
+        assert_eq!(config.server.port, 8080);
+        assert_eq!(config.server.bind_address, "127.0.0.1");
+        assert_eq!(config.server.path, "/custom-metrics");
+        assert_eq!(config.jolokia.url, "http://example.com:9999/jolokia");
+        assert_eq!(config.jolokia.timeout_ms, 15000);
+        assert_eq!(config.jolokia.username, Some("user".to_string()));
+        assert_eq!(config.jolokia.password, Some("pass".to_string()));
+        assert!(config.server.tls.enabled);
+        assert_eq!(
+            config.server.tls.cert_file,
+            Some("/path/to/cert.pem".to_string())
+        );
+        assert_eq!(
+            config.server.tls.key_file,
+            Some("/path/to/key.pem".to_string())
+        );
+    }
+
+    #[test]
+    fn test_apply_overrides_none_preserves_config() {
+        let mut config = Config::default();
+        config.server.port = 8080;
+        config.jolokia.url = "http://custom:8778/jolokia".to_string();
+
+        let overrides = ConfigOverrides::default();
+        config.apply_overrides(&overrides);
+
+        // Should preserve original values when overrides are None
+        assert_eq!(config.server.port, 8080);
+        assert_eq!(config.jolokia.url, "http://custom:8778/jolokia");
+    }
+
+    #[test]
+    fn test_validate_final_valid() {
+        let config = Config::default();
+        assert!(config.validate_final().is_ok());
+    }
+
+    #[test]
+    fn test_validate_final_invalid_port() {
+        let mut config = Config::default();
+        config.server.port = 0;
+        assert!(config.validate_final().is_err());
+    }
+
+    #[test]
+    fn test_validate_final_invalid_metrics_path() {
+        let mut config = Config::default();
+        config.server.path = "no-slash".to_string();
+        let err = config.validate_final();
+        assert!(err.is_err());
+        assert!(err
+            .unwrap_err()
+            .to_string()
+            .contains("Metrics path must start with '/'"));
+    }
+
+    #[test]
+    fn test_validate_final_conflicting_metrics_path() {
+        let mut config = Config::default();
+        config.server.path = "/health".to_string();
+        let err = config.validate_final();
+        assert!(err.is_err());
+        assert!(err.unwrap_err().to_string().contains("must not conflict"));
     }
 }

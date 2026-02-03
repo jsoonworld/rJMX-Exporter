@@ -320,7 +320,8 @@ impl TransformEngine {
             for (attr_name, attr_value) in attrs {
                 match attr_value {
                     AttributeValue::Integer(n) => {
-                        let mut m = self.transform_simple(mbean_name, Some(attr_name), *n as f64)?;
+                        let mut m =
+                            self.transform_simple(mbean_name, Some(attr_name), *n as f64)?;
                         metrics.append(&mut m);
                     }
                     AttributeValue::Float(n) => {
@@ -329,7 +330,8 @@ impl TransformEngine {
                     }
                     AttributeValue::Object(nested) => {
                         // Recursively handle nested composite objects
-                        let mut m = self.transform_composite(mbean_name, Some(attr_name), nested)?;
+                        let mut m =
+                            self.transform_composite(mbean_name, Some(attr_name), nested)?;
                         metrics.append(&mut m);
                     }
                     _ => {

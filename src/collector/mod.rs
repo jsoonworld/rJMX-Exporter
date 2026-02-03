@@ -1,6 +1,6 @@
-//! Jolokia JMX 메트릭 수집 모듈
+//! Jolokia JMX metrics collection module
 //!
-//! Java 애플리케이션의 Jolokia 엔드포인트에서 JMX 메트릭을 수집합니다.
+//! Collects JMX metrics from Java application's Jolokia endpoint.
 //!
 //! # Example
 //!
@@ -20,14 +20,14 @@ pub use parser::{
     MBeanValue, ObjectName, RequestInfo,
 };
 
-/// MBean 수집 설정
+/// MBean collection configuration
 #[derive(Debug, Clone)]
 pub struct CollectConfig {
-    /// 조회할 MBean ObjectName 목록
+    /// List of MBean ObjectNames to query
     pub mbeans: Vec<String>,
-    /// 특정 속성만 조회 (None이면 전체)
+    /// Specific attributes to query (None for all attributes)
     pub attributes: Option<Vec<String>>,
-    /// 요청 타임아웃 (밀리초)
+    /// Request timeout in milliseconds
     pub timeout_ms: u64,
 }
 
@@ -41,27 +41,27 @@ impl Default for CollectConfig {
     }
 }
 
-/// Collector 구조체 - 설정 기반 수집 래퍼
+/// Collector struct - configuration-based collection wrapper
 pub struct Collector {
     client: JolokiaClient,
     config: CollectConfig,
 }
 
 impl Collector {
-    /// 새 Collector 생성
+    /// Create a new Collector
     pub fn new(base_url: &str, config: CollectConfig) -> CollectResult<Self> {
         let client = JolokiaClient::new(base_url, config.timeout_ms)?;
         Ok(Self { client, config })
     }
 
-    /// 설정된 MBean들 수집
+    /// Collect configured MBeans
     pub async fn collect(&self) -> Vec<(String, CollectResult<JolokiaResponse>)> {
         self.client
             .collect_with_fallback(&self.config.mbeans, self.config.attributes.as_deref())
             .await
     }
 
-    /// Bulk 수집 (단일 HTTP 요청)
+    /// Bulk collection (single HTTP request)
     pub async fn collect_bulk(&self) -> CollectResult<Vec<JolokiaResponse>> {
         let mbeans: Vec<(&str, Option<&[String]>)> = self
             .config
@@ -73,7 +73,7 @@ impl Collector {
         self.client.read_mbeans_bulk(&mbeans).await
     }
 
-    /// 클라이언트 참조 반환
+    /// Return reference to client
     pub fn client(&self) -> &JolokiaClient {
         &self.client
     }

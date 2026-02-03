@@ -1,0 +1,19 @@
+apiVersion: v2
+name: rjmx-exporter
+description: A Helm chart for rJMX-Exporter - High-performance JMX Metric Exporter written in Rust
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+keywords:
+  - prometheus
+  - jmx
+  - metrics
+  - exporter
+  - jolokia
+  - monitoring
+home: https://github.com/jsoonworld/rJMX-Exporter
+sources:
+  - https://github.com/jsoonworld/rJMX-Exporter
+maintainers:
+  - name: jsoonworld
+    url: https://github.com/jsoonworld

@@ -1,14 +1,17 @@
 //! HTTP server module
 //!
 //! Provides the Axum-based HTTP server for serving metrics.
+//! Supports both HTTP and HTTPS (TLS) modes.
 
 pub mod handlers;
 
 use std::net::SocketAddr;
+use std::path::Path;
 use std::sync::Arc;
 
 use anyhow::Result;
 use axum::{routing::get, Router};
+use axum_server::tls_rustls::RustlsConfig;
 use tokio::signal;
 use tower_http::trace::TraceLayer;
 use tracing::info;
@@ -75,15 +78,22 @@ fn config_to_ruleset(config: &Config) -> RuleSet {
 
 /// Run the HTTP server
 ///
+/// Starts either an HTTP or HTTPS server based on TLS configuration.
+/// When TLS is enabled, loads certificates from the specified paths
+/// and starts an HTTPS server. Otherwise, starts a plain HTTP server.
+///
 /// # Arguments
-/// * `config` - Application configuration
-/// * `port` - Server port to bind to (overrides config.server.port)
+/// * `config` - Application configuration (with all overrides already applied)
 ///
 /// # Errors
-/// Returns an error if the server fails to start
-pub async fn run(config: Config, port: u16) -> Result<()> {
+/// Returns an error if:
+/// - The server fails to start
+/// - TLS is enabled but certificate files cannot be loaded
+pub async fn run(config: Config) -> Result<()> {
+    let port = config.server.port;
     let bind_address = config.server.bind_address.clone();
     let metrics_path = config.server.path.clone();
+    let tls_config = config.server.tls.clone();
 
     // Create Jolokia client
     let mut client = JolokiaClient::new(&config.jolokia.url, config.jolokia.timeout_ms)?;
@@ -125,12 +135,94 @@ pub async fn run(config: Config, port: u16) -> Result<()> {
             .map_err(|e| anyhow::anyhow!("Invalid bind_address '{}': {}. Use an IP address (e.g., '0.0.0.0', '127.0.0.1') or 'localhost'.", bind_address, e))?
     };
     let addr = SocketAddr::from((bind_addr, port));
-    info!(address = %addr, metrics_path = %metrics_path, "Server listening");
+
+    // Start server with or without TLS
+    if tls_config.enabled {
+        run_https_server(app, addr, &metrics_path, &tls_config).await
+    } else {
+        run_http_server(app, addr, &metrics_path).await
+    }
+}
+
+/// Run a plain HTTP server
+async fn run_http_server(app: Router, addr: SocketAddr, metrics_path: &str) -> Result<()> {
+    info!(
+        address = %addr,
+        metrics_path = %metrics_path,
+        tls = false,
+        "Server listening (HTTP)"
+    );
 
     let listener = tokio::net::TcpListener::bind(addr).await?;
 
     axum::serve(listener, app)
         .with_graceful_shutdown(shutdown_signal())
+        .await?;
+
+    info!("Server shutdown complete");
+    Ok(())
+}
+
+/// Run an HTTPS server with TLS
+async fn run_https_server(
+    app: Router,
+    addr: SocketAddr,
+    metrics_path: &str,
+    tls_config: &crate::config::TlsConfig,
+) -> Result<()> {
+    // Get certificate and key file paths (already validated in config)
+    let cert_file = tls_config
+        .cert_file
+        .as_ref()
+        .ok_or_else(|| anyhow::anyhow!("TLS cert_file is required when TLS is enabled"))?;
+    let key_file = tls_config
+        .key_file
+        .as_ref()
+        .ok_or_else(|| anyhow::anyhow!("TLS key_file is required when TLS is enabled"))?;
+
+    // Validate that certificate files exist
+    let cert_path = Path::new(cert_file);
+    let key_path = Path::new(key_file);
+
+    if !cert_path.exists() {
+        return Err(anyhow::anyhow!(
+            "TLS certificate file not found: {}",
+            cert_file
+        ));
+    }
+    if !key_path.exists() {
+        return Err(anyhow::anyhow!(
+            "TLS private key file not found: {}",
+            key_file
+        ));
+    }
+
+    // Load TLS configuration
+    let rustls_config = RustlsConfig::from_pem_file(cert_path, key_path)
+        .await
+        .map_err(|e| anyhow::anyhow!("Failed to load TLS certificates: {}", e))?;
+
+    info!(
+        address = %addr,
+        metrics_path = %metrics_path,
+        tls = true,
+        cert_file = %cert_file,
+        "Server listening (HTTPS)"
+    );
+
+    // Create and run the HTTPS server with graceful shutdown
+    let handle = axum_server::Handle::new();
+    let shutdown_handle = handle.clone();
+
+    // Spawn shutdown signal handler
+    tokio::spawn(async move {
+        shutdown_signal().await;
+        shutdown_handle.graceful_shutdown(Some(std::time::Duration::from_secs(10)));
+    });
+
+    axum_server::bind_rustls(addr, rustls_config)
+        .handle(handle)
+        .serve(app.into_make_service())
         .await?;
 
     info!("Server shutdown complete");

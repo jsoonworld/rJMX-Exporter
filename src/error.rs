@@ -6,10 +6,10 @@ use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use thiserror::Error;
 
-/// Rule 파싱 및 regex 관련 에러
+/// Rule parsing and regex related errors
 #[derive(Error, Debug)]
 pub enum RuleError {
-    /// 정규식 패턴 컴파일 실패
+    /// Regex pattern compilation failed
     #[error("Invalid regex pattern '{pattern}': {source}")]
     InvalidPattern {
         pattern: String,
@@ -17,11 +17,11 @@ pub enum RuleError {
         source: regex::Error,
     },
 
-    /// 지원되지 않는 regex 문법
+    /// Unsupported regex syntax
     #[error("Unsupported regex syntax in pattern '{pattern}': {feature}")]
     UnsupportedSyntax { pattern: String, feature: String },
 
-    /// 규칙 컴파일 실패 (인덱스 포함)
+    /// Rule compilation failed (with index)
     #[error("Failed to compile rule at index {index}: {source}")]
     RuleCompileFailed {
         index: usize,
@@ -30,22 +30,22 @@ pub enum RuleError {
     },
 }
 
-/// Transform 엔진 에러
+/// Transform engine errors
 #[derive(Error, Debug)]
 pub enum TransformError {
-    /// 규칙 에러
+    /// Rule error
     #[error("Rule error: {0}")]
     Rule(#[from] RuleError),
 
-    /// 유효하지 않은 메트릭명
+    /// Invalid metric name
     #[error("Invalid metric name '{name}': {reason}")]
     InvalidMetricName { name: String, reason: String },
 
-    /// 유효하지 않은 라벨명
+    /// Invalid label name
     #[error("Invalid label name '{name}': {reason}")]
     InvalidLabelName { name: String, reason: String },
 
-    /// 캡처 그룹 누락
+    /// Missing capture group
     #[error("Missing capture group ${group} in pattern")]
     MissingCaptureGroup { group: usize },
 }
@@ -78,61 +78,61 @@ pub enum AppError {
     Collector(#[from] CollectorError),
 }
 
-/// Collector 모듈 에러 타입
+/// Collector module error types
 #[derive(Error, Debug)]
 pub enum CollectorError {
-    /// HTTP 클라이언트 초기화 실패
+    /// HTTP client initialization failed
     #[error("Failed to initialize HTTP client: {0}")]
     HttpClientInit(#[source] reqwest::Error),
 
-    /// HTTP 요청 실패
+    /// HTTP request failed
     #[error("HTTP request failed: {0}")]
     HttpRequest(#[source] reqwest::Error),
 
-    /// HTTP 응답 읽기 실패
+    /// HTTP response read failed
     #[error("Failed to read HTTP response: {0}")]
     HttpResponse(#[source] reqwest::Error),
 
-    /// HTTP 상태 코드 에러
+    /// HTTP status code error
     #[error("HTTP error status: {0}")]
     HttpStatus(u16),
 
-    /// JSON 파싱 에러
+    /// JSON parsing error
     #[error("JSON parse error: {0}")]
     JsonParse(String),
 
-    /// Jolokia 에러 응답
+    /// Jolokia error response
     #[error("Jolokia error (status {status}): {message}")]
     JolokiaError { status: u16, message: String },
 
-    /// MBean을 찾을 수 없음
+    /// MBean not found
     #[error("MBean not found: {0}")]
     MBeanNotFound(String),
 
-    /// 잘못된 ObjectName
+    /// Invalid ObjectName
     #[error("Invalid ObjectName: {0}")]
     InvalidObjectName(String),
 
-    /// 타임아웃
+    /// Timeout
     /// The value is the configured timeout in milliseconds, if known.
     #[error("Request timed out{}", .0.map(|ms| format!(" after {}ms", ms)).unwrap_or_default())]
     Timeout(Option<u64>),
 
-    /// 연결 실패
+    /// Connection failed
     #[error("Connection failed: {0}")]
     ConnectionFailed(String),
 
-    /// 최대 재시도 초과
+    /// Maximum retries exceeded
     #[error("Maximum retries exceeded")]
     MaxRetriesExceeded,
 
-    /// 인증 실패
+    /// Authentication failed
     #[error("Authentication failed")]
     AuthenticationFailed,
 }
 
 impl CollectorError {
-    /// 재시도 가능한 에러인지 확인
+    /// Check if the error is retryable
     pub fn is_retryable(&self) -> bool {
         matches!(
             self,
@@ -144,7 +144,7 @@ impl CollectorError {
         )
     }
 
-    /// HTTP 상태 코드 추출
+    /// Extract HTTP status code
     pub fn http_status(&self) -> Option<u16> {
         match self {
             CollectorError::HttpStatus(code) => Some(*code),
