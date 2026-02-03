@@ -80,12 +80,12 @@ spec:
             - name: RUST_LOG
               value: "info"
             {{- if .Values.jolokiaAuth.enabled }}
-            - name: JOLOKIA_USERNAME
+            - name: RJMX_USERNAME
               valueFrom:
                 secretKeyRef:
                   name: {{ include "rjmx-exporter.secretName" . }}
                   key: username
-            - name: JOLOKIA_PASSWORD
+            - name: RJMX_PASSWORD
               valueFrom:
                 secretKeyRef:
                   name: {{ include "rjmx-exporter.secretName" . }}

@@ -341,19 +341,28 @@ impl InternalMetrics {
     /// Get or create metrics for a target
     pub fn target(&self, target: &str) -> TargetMetrics {
         {
-            let targets = self.targets.read().expect("RwLock poisoned");
+            let Ok(targets) = self.targets.read() else {
+                tracing::error!("RwLock poisoned while reading targets");
+                return TargetMetrics::default();
+            };
             if let Some(metrics) = targets.get(target) {
                 return metrics.clone();
             }
         }
 
-        let mut targets = self.targets.write().expect("RwLock poisoned");
+        let Ok(mut targets) = self.targets.write() else {
+            tracing::error!("RwLock poisoned while writing targets");
+            return TargetMetrics::default();
+        };
         targets.entry(target.to_string()).or_default().clone()
     }
 
     /// Record a successful scrape for a target
     pub fn record_scrape_success(&self, target: &str, duration_seconds: f64) {
-        let mut targets = self.targets.write().expect("RwLock poisoned");
+        let Ok(mut targets) = self.targets.write() else {
+            tracing::error!("RwLock poisoned while recording scrape success");
+            return;
+        };
         let metrics = targets.entry(target.to_string()).or_default();
         metrics.scrape_success_total.inc();
         metrics.scrape_duration_seconds.observe(duration_seconds);
@@ -361,7 +370,10 @@ impl InternalMetrics {
 
     /// Record a failed scrape for a target
     pub fn record_scrape_failure(&self, target: &str, duration_seconds: f64) {
-        let mut targets = self.targets.write().expect("RwLock poisoned");
+        let Ok(mut targets) = self.targets.write() else {
+            tracing::error!("RwLock poisoned while recording scrape failure");
+            return;
+        };
         let metrics = targets.entry(target.to_string()).or_default();
         metrics.scrape_failure_total.inc();
         metrics.scrape_duration_seconds.observe(duration_seconds);
@@ -370,26 +382,38 @@ impl InternalMetrics {
     /// Get or create metrics for a rule
     pub fn rule(&self, pattern: &str) -> RuleMetrics {
         {
-            let rules = self.rules.read().expect("RwLock poisoned");
+            let Ok(rules) = self.rules.read() else {
+                tracing::error!("RwLock poisoned while reading rules");
+                return RuleMetrics::default();
+            };
             if let Some(metrics) = rules.get(pattern) {
                 return metrics.clone();
             }
         }
 
-        let mut rules = self.rules.write().expect("RwLock poisoned");
+        let Ok(mut rules) = self.rules.write() else {
+            tracing::error!("RwLock poisoned while writing rules");
+            return RuleMetrics::default();
+        };
         rules.entry(pattern.to_string()).or_default().clone()
     }
 
     /// Record a rule match
     pub fn record_rule_match(&self, pattern: &str) {
-        let mut rules = self.rules.write().expect("RwLock poisoned");
+        let Ok(mut rules) = self.rules.write() else {
+            tracing::error!("RwLock poisoned while recording rule match");
+            return;
+        };
         let metrics = rules.entry(pattern.to_string()).or_default();
         metrics.matches_total.inc();
     }
 
     /// Record a rule error
     pub fn record_rule_error(&self, pattern: &str) {
-        let mut rules = self.rules.write().expect("RwLock poisoned");
+        let Ok(mut rules) = self.rules.write() else {
+            tracing::error!("RwLock poisoned while recording rule error");
+            return;
+        };
         let metrics = rules.entry(pattern.to_string()).or_default();
         metrics.errors_total.inc();
     }
@@ -411,8 +435,7 @@ impl InternalMetrics {
         let mut metrics = Vec::new();
 
         // Per-target metrics
-        {
-            let targets = self.targets.read().expect("RwLock poisoned");
+        if let Ok(targets) = self.targets.read() {
             for (target, target_metrics) in targets.iter() {
                 // Scrape success counter
                 metrics.push(
@@ -471,8 +494,7 @@ impl InternalMetrics {
         }
 
         // Per-rule metrics
-        {
-            let rules = self.rules.read().expect("RwLock poisoned");
+        if let Ok(rules) = self.rules.read() {
             for (pattern, rule_metrics) in rules.iter() {
                 metrics.push(
                     PrometheusMetric::new(
