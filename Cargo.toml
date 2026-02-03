@@ -19,7 +19,7 @@ tower = "0.4"
 tower-http = { version = "0.6", features = ["trace", "cors"] }
 
 # HTTP client (Phase 2에서 사용)
-reqwest = { version = "0.11", default-features = false, features = ["json", "rustls-tls"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 
 # Serialization
 serde = { version = "1.0", features = ["derive"] }
@@ -44,7 +44,7 @@ regex = "1.10"
 [dev-dependencies]
 # Testing
 tokio-test = "0.4"
-reqwest = { version = "0.11", default-features = false, features = ["json", "rustls-tls"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 assert_cmd = "2.0"
 predicates = "3.0"
 wiremock = "0.6"
