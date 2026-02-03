@@ -732,15 +732,15 @@ mod tests {
     #[test]
     fn test_gauge_clone() {
         let gauge = Gauge::new();
-        gauge.set(3.14);
+        gauge.set(3.5);
 
         let cloned = gauge.clone();
-        assert_eq!(cloned.get(), 3.14);
+        assert_eq!(cloned.get(), 3.5);
 
         // Ensure independence
-        gauge.set(2.71);
-        assert_eq!(gauge.get(), 2.71);
-        assert_eq!(cloned.get(), 3.14);
+        gauge.set(2.5);
+        assert_eq!(gauge.get(), 2.5);
+        assert_eq!(cloned.get(), 3.5);
     }
 
     #[test]
