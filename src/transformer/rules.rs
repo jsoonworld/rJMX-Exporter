@@ -280,6 +280,11 @@ impl Rule {
         self.compiled_pattern.get()
     }
 
+    /// Check if the rule pattern has been compiled
+    pub fn is_compiled(&self) -> bool {
+        self.compiled_pattern.get().is_some()
+    }
+
     /// Check if the rule matches the given input string
     ///
     /// # Arguments
@@ -602,6 +607,11 @@ impl RuleSet {
     /// Iterate over all rules
     pub fn iter(&self) -> impl Iterator<Item = &Rule> {
         self.rules.iter()
+    }
+
+    /// Get a reference to the underlying rules vector
+    pub fn rules(&self) -> &[Rule] {
+        &self.rules
     }
 
     /// Get a rule by index

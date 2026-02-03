@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "rjmx-exporter.configmapName" . }}
+  labels:
+    {{- include "rjmx-exporter.labels" . | nindent 4 }}
+data:
+  config.yaml: |
+    server:
+      port: {{ .Values.config.server.port }}
+      path: {{ .Values.config.server.path | quote }}
+
+    targets:
+      {{- toYaml .Values.config.targets | nindent 6 }}
+
+    rules:
+      {{- toYaml .Values.config.rules | nindent 6 }}

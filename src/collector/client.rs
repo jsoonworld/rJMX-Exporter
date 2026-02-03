@@ -1,6 +1,6 @@
-//! Jolokia HTTP 클라이언트
+//! Jolokia HTTP client
 //!
-//! Connection pooling과 타임아웃을 지원하는 비동기 HTTP 클라이언트입니다.
+//! Async HTTP client with connection pooling and timeout support.
 
 use reqwest::{Client, ClientBuilder};
 use serde::{Deserialize, Serialize};
@@ -10,7 +10,7 @@ use tracing::{debug, instrument, warn};
 use super::parser::{parse_bulk_response, parse_response, CollectResult, JolokiaResponse};
 use crate::error::CollectorError;
 
-/// Jolokia HTTP 클라이언트
+/// Jolokia HTTP client
 #[derive(Clone)]
 pub struct JolokiaClient {
     client: Client,
@@ -20,7 +20,7 @@ pub struct JolokiaClient {
     auth: Option<(String, String)>,
 }
 
-/// Jolokia 요청 구조체
+/// Jolokia request struct
 #[derive(Debug, Serialize)]
 struct JolokiaRequest {
     #[serde(rename = "type")]
@@ -37,16 +37,16 @@ enum AttributeSpec {
     Multiple(Vec<String>),
 }
 
-/// 재시도 설정
+/// Retry configuration
 #[derive(Debug, Clone)]
 pub struct RetryConfig {
-    /// 최대 재시도 횟수
+    /// Maximum number of retries
     pub max_retries: u32,
-    /// 초기 지연 시간
+    /// Initial delay duration
     pub initial_delay: Duration,
-    /// 최대 지연 시간
+    /// Maximum delay duration
     pub max_delay: Duration,
-    /// 지연 시간 증가 배수
+    /// Delay multiplier
     pub multiplier: f64,
 }
 
@@ -62,11 +62,11 @@ impl Default for RetryConfig {
 }
 
 impl JolokiaClient {
-    /// 새 클라이언트 생성
+    /// Create a new client
     ///
     /// # Arguments
-    /// * `base_url` - Jolokia 엔드포인트 URL (예: "http://localhost:8778/jolokia")
-    /// * `timeout_ms` - 기본 타임아웃 (밀리초)
+    /// * `base_url` - Jolokia endpoint URL (e.g., "http://localhost:8778/jolokia")
+    /// * `timeout_ms` - Default timeout in milliseconds
     ///
     /// # Example
     /// ```ignore
@@ -88,13 +88,13 @@ impl JolokiaClient {
         })
     }
 
-    /// Basic Auth 설정
+    /// Set Basic Auth credentials
     pub fn with_auth(mut self, username: &str, password: &str) -> Self {
         self.auth = Some((username.to_string(), password.to_string()));
         self
     }
 
-    /// 단일 MBean 조회
+    /// Read a single MBean
     #[instrument(skip(self), fields(mbean = %mbean))]
     pub async fn read_mbean(
         &self,
@@ -138,7 +138,7 @@ impl JolokiaClient {
         parse_response(&body)
     }
 
-    /// Bulk Read - 여러 MBean 일괄 조회
+    /// Bulk Read - read multiple MBeans in a single request
     #[instrument(skip(self, mbeans), fields(count = mbeans.len()))]
     pub async fn read_mbeans_bulk(
         &self,
@@ -191,7 +191,7 @@ impl JolokiaClient {
         parse_bulk_response(&body)
     }
 
-    /// MBean 목록 조회 (Search)
+    /// Search MBeans by pattern
     #[instrument(skip(self))]
     pub async fn search_mbeans(&self, pattern: &str) -> CollectResult<Vec<String>> {
         #[derive(Serialize)]
@@ -243,7 +243,7 @@ impl JolokiaClient {
         Ok(parsed.value)
     }
 
-    /// 재시도 로직이 포함된 단일 MBean 조회
+    /// Read a single MBean with retry logic
     pub async fn read_mbean_with_retry(
         &self,
         mbean: &str,
@@ -314,7 +314,7 @@ impl JolokiaClient {
         (500..600).contains(&status)
     }
 
-    /// Fallback이 있는 수집 - 부분 실패 허용
+    /// Collection with fallback - allows partial failures
     pub async fn collect_with_fallback(
         &self,
         mbeans: &[String],

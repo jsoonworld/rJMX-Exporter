@@ -1,6 +1,6 @@
-//! Jolokia JSON 응답 파서
+//! Jolokia JSON response parser
 //!
-//! Jolokia API 응답을 파싱하여 내부 데이터 구조로 변환합니다.
+//! Parses Jolokia API responses and converts them to internal data structures.
 
 use serde::Deserialize;
 use serde_json::Value;
@@ -8,79 +8,79 @@ use std::collections::HashMap;
 
 use crate::error::CollectorError;
 
-/// Collector 작업 결과 타입
+/// Collector operation result type
 pub type CollectResult<T> = Result<T, CollectorError>;
 
-/// Jolokia API 응답 구조체
+/// Jolokia API response struct
 #[derive(Debug, Clone)]
 pub struct JolokiaResponse {
-    /// 요청 정보
+    /// Request information
     pub request: RequestInfo,
-    /// 응답 값
+    /// Response value
     pub value: MBeanValue,
-    /// 응답 상태 코드
+    /// Response status code
     pub status: u16,
-    /// 타임스탬프 (Unix epoch)
+    /// Timestamp (Unix epoch)
     pub timestamp: u64,
-    /// 에러 메시지 (실패 시)
+    /// Error message (on failure)
     pub error: Option<String>,
-    /// 에러 타입 (실패 시)
+    /// Error type (on failure)
     pub error_type: Option<String>,
 }
 
-/// 요청 정보
+/// Request information
 #[derive(Debug, Clone, Deserialize)]
 pub struct RequestInfo {
     /// MBean ObjectName
     pub mbean: String,
-    /// 조회한 속성 (단일 또는 복수)
+    /// Queried attributes (single or multiple)
     #[serde(default)]
     pub attribute: Option<Value>,
-    /// 요청 타입
+    /// Request type
     #[serde(rename = "type")]
     pub request_type: String,
 }
 
-/// MBean 값 - 다양한 형태를 지원
+/// MBean value - supports various formats
 #[derive(Debug, Clone)]
 pub enum MBeanValue {
-    /// 단순 숫자 값
+    /// Simple numeric value
     Number(f64),
-    /// 문자열 값
+    /// String value
     String(String),
-    /// 불리언 값
+    /// Boolean value
     Boolean(bool),
-    /// Null 값
+    /// Null value
     Null,
-    /// 복합 객체 (CompositeData)
+    /// Composite object (CompositeData)
     Composite(HashMap<String, AttributeValue>),
-    /// 배열
+    /// Array
     Array(Vec<AttributeValue>),
-    /// 와일드카드 결과 (MBean ObjectName -> 속성 맵)
+    /// Wildcard result (MBean ObjectName -> attribute map)
     Wildcard(HashMap<String, HashMap<String, AttributeValue>>),
 }
 
-/// 개별 속성 값
+/// Individual attribute value
 #[derive(Debug, Clone)]
 pub enum AttributeValue {
-    /// 정수
+    /// Integer
     Integer(i64),
-    /// 실수
+    /// Float
     Float(f64),
-    /// 문자열
+    /// String
     String(String),
-    /// 불리언
+    /// Boolean
     Boolean(bool),
     /// Null
     Null,
-    /// 중첩 객체
+    /// Nested object
     Object(HashMap<String, AttributeValue>),
-    /// 배열
+    /// Array
     Array(Vec<AttributeValue>),
 }
 
 impl AttributeValue {
-    /// 숫자로 변환 시도
+    /// Try to convert to number
     ///
     /// # Precision Warning
     /// When converting `Integer(i64)` to `f64`, precision loss may occur
@@ -102,7 +102,7 @@ impl AttributeValue {
         }
     }
 
-    /// 문자열로 변환
+    /// Convert to string
     pub fn as_string(&self) -> Option<String> {
         match self {
             AttributeValue::String(s) => Some(s.clone()),
@@ -114,7 +114,7 @@ impl AttributeValue {
     }
 }
 
-/// 단일 응답 파싱
+/// Parse a single response
 pub fn parse_response(json: &str) -> CollectResult<JolokiaResponse> {
     let raw: RawJolokiaResponse =
         serde_json::from_str(json).map_err(|e| CollectorError::JsonParse(e.to_string()))?;
@@ -122,7 +122,7 @@ pub fn parse_response(json: &str) -> CollectResult<JolokiaResponse> {
     convert_raw_response(raw)
 }
 
-/// Bulk 응답 파싱
+/// Parse bulk response
 pub fn parse_bulk_response(json: &str) -> CollectResult<Vec<JolokiaResponse>> {
     let raw_responses: Vec<RawJolokiaResponse> =
         serde_json::from_str(json).map_err(|e| CollectorError::JsonParse(e.to_string()))?;
@@ -133,7 +133,7 @@ pub fn parse_bulk_response(json: &str) -> CollectResult<Vec<JolokiaResponse>> {
         .collect()
 }
 
-/// 내부 파싱용 구조체
+/// Internal struct for parsing
 #[derive(Deserialize)]
 struct RawJolokiaResponse {
     request: RequestInfo,
@@ -146,7 +146,7 @@ struct RawJolokiaResponse {
 }
 
 fn convert_raw_response(raw: RawJolokiaResponse) -> CollectResult<JolokiaResponse> {
-    // 에러 응답 처리
+    // Handle error response
     if raw.status != 200 {
         return Ok(JolokiaResponse {
             request: raw.request,
@@ -192,7 +192,7 @@ fn parse_mbean_value(value: Value) -> CollectResult<MBeanValue> {
             Ok(MBeanValue::Array(parsed))
         }
         Value::Object(map) => {
-            // 와일드카드 응답인지 확인 (값이 모두 객체이고 MBean ObjectName 형태)
+            // Check if this is a wildcard response (all values are objects and keys are MBean ObjectNames)
             let is_wildcard = map
                 .iter()
                 .all(|(k, v)| k.contains(':') && k.contains('=') && v.is_object());
@@ -210,7 +210,7 @@ fn parse_mbean_value(value: Value) -> CollectResult<MBeanValue> {
                 }
                 Ok(MBeanValue::Wildcard(result))
             } else {
-                // 일반 CompositeData
+                // Regular CompositeData
                 let parsed: HashMap<String, AttributeValue> = map
                     .into_iter()
                     .map(|(k, v)| Ok((k, parse_attribute_value(v)?)))
@@ -252,9 +252,9 @@ fn parse_attribute_value(value: Value) -> CollectResult<AttributeValue> {
     }
 }
 
-/// 값 추출 유틸리티 - Prometheus 메트릭용
+/// Value extraction utilities for Prometheus metrics
 impl MBeanValue {
-    /// Composite 값에서 특정 키의 숫자 추출
+    /// Extract a number from a composite value by key
     pub fn get_composite_number(&self, key: &str) -> Option<f64> {
         match self {
             MBeanValue::Composite(map) => map.get(key).and_then(|v| v.as_f64()),
@@ -262,7 +262,7 @@ impl MBeanValue {
         }
     }
 
-    /// 단순 숫자 값 추출
+    /// Extract simple numeric value
     pub fn as_number(&self) -> Option<f64> {
         match self {
             MBeanValue::Number(n) => Some(*n),
@@ -270,7 +270,7 @@ impl MBeanValue {
         }
     }
 
-    /// 모든 숫자 값을 (이름, 값) 쌍으로 평탄화
+    /// Flatten all numeric values into (name, value) pairs
     pub fn flatten_numbers(&self) -> Vec<(String, f64)> {
         let mut result = Vec::new();
         self.flatten_numbers_inner("", &mut result);
@@ -304,17 +304,17 @@ impl MBeanValue {
     }
 }
 
-/// MBean ObjectName 구조
+/// MBean ObjectName structure
 #[derive(Debug, Clone, PartialEq)]
 pub struct ObjectName {
-    /// 도메인 (예: "java.lang")
+    /// Domain (e.g., "java.lang")
     pub domain: String,
-    /// 속성 (예: {"type": "Memory"})
+    /// Properties (e.g., {"type": "Memory"})
     pub properties: HashMap<String, String>,
 }
 
 impl ObjectName {
-    /// ObjectName 문자열 파싱
+    /// Parse ObjectName string
     ///
     /// # Limitations
     /// - Quoted keys/values are NOT fully supported
@@ -357,7 +357,7 @@ impl ObjectName {
         Ok(Self { domain, properties })
     }
 
-    /// Prometheus 라벨용 문자열 생성
+    /// Generate string for Prometheus labels
     ///
     /// Properties are sorted alphabetically by key to ensure deterministic output.
     /// Label values are escaped according to Prometheus text format rules.

@@ -1,0 +1,36 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+metadata:
+  name: rjmx-exporter
+
+labels:
+  - includeSelectors: true
+    pairs:
+      app.kubernetes.io/managed-by: kustomize
+
+resources:
+  - serviceaccount.yaml
+  - configmap.yaml
+  - secret.yaml
+  - deployment.yaml
+  - service.yaml
+
+commonLabels:
+  app.kubernetes.io/name: rjmx-exporter
+  app.kubernetes.io/instance: rjmx-exporter
+  app.kubernetes.io/version: "0.1.0"
+  app.kubernetes.io/part-of: monitoring
+
+# Uncomment and customize for different environments
+# images:
+#   - name: rjmx-exporter
+#     newName: your-registry/rjmx-exporter
+#     newTag: v0.1.0
+
+# Uncomment to add a namespace
+# namespace: monitoring
+
+# Uncomment to add name prefix/suffix
+# namePrefix: prod-
+# nameSuffix: -v1

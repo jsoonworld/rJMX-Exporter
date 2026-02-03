@@ -14,6 +14,7 @@ use serde::Serialize;
 use tracing::{debug, instrument, warn};
 
 use super::AppState;
+use crate::metrics::internal_metrics;
 use crate::transformer::PrometheusFormatter;
 
 /// Health check response
@@ -70,6 +71,10 @@ const DEFAULT_MBEANS: &[&str] = &[
 #[instrument(skip(state), name = "metrics_handler")]
 pub async fn metrics(State(state): State<AppState>) -> impl IntoResponse {
     let start = Instant::now();
+    let metrics_registry = internal_metrics();
+
+    // Get target name from config for metrics labeling
+    let target_name = &state.config.jolokia.url;
 
     // Determine which MBeans to collect
     let mbeans_to_collect: Vec<String> = if !state.config.whitelist_object_names.is_empty() {
@@ -122,7 +127,17 @@ pub async fn metrics(State(state): State<AppState>) -> impl IntoResponse {
 
     // Transform to Prometheus metrics
     let prometheus_metrics = match state.engine.transform(&all_responses) {
-        Ok(metrics) => metrics,
+        Ok(metrics) => {
+            // Record rule matches for internal metrics
+            for rule in state.engine.rules().rules() {
+                if rule.is_compiled() {
+                    // Record rule activity (simplified - actual match counting would require
+                    // more detailed tracking in the transform engine)
+                    metrics_registry.record_rule_match(&rule.pattern);
+                }
+            }
+            metrics
+        }
         Err(e) => {
             warn!(error = %e, "Transform error");
             errors.push(format!("transform: {}", e));
@@ -134,8 +149,17 @@ pub async fn metrics(State(state): State<AppState>) -> impl IntoResponse {
     let formatter = PrometheusFormatter::new();
     let mut output = formatter.format(&prometheus_metrics);
 
-    // Add exporter info metrics
+    // Calculate scrape duration
     let scrape_duration = start.elapsed().as_secs_f64();
+
+    // Record internal metrics for this scrape
+    if errors.is_empty() {
+        metrics_registry.record_scrape_success(target_name, scrape_duration);
+    } else {
+        metrics_registry.record_scrape_failure(target_name, scrape_duration);
+    }
+
+    // Add exporter info metrics
     output.push_str(&format!(
         r#"# HELP rjmx_exporter_info rJMX-Exporter information
 # TYPE rjmx_exporter_info gauge
@@ -155,6 +179,9 @@ rjmx_exporter_metrics_scraped {}
         errors.len(),
         prometheus_metrics.len()
     ));
+
+    // Append internal observability metrics
+    output.push_str(&metrics_registry.format_prometheus());
 
     debug!(
         duration_ms = start.elapsed().as_millis() as u64,
