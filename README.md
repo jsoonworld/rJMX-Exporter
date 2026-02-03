@@ -1,6 +1,6 @@
 # rJMX-Exporter
 
-[![CI](https://github.com/jsoonworld/rJMX-Exporter/actions/workflows/ci.yml/badge.svg)](https://github.com/jsoonworld/rJMX-Exporter/actions/workflows/ci.yml)
+[![CI](https://github.com/jsoonworld/rJMX-Exporter/actions/workflows/ci.yaml/badge.svg)](https://github.com/jsoonworld/rJMX-Exporter/actions/workflows/ci.yaml)
 [![License](https://img.shields.io/badge/license-MIT%2FApache--2.0-blue.svg)](LICENSE)
 [![Rust](https://img.shields.io/badge/rust-1.75%2B-orange.svg)](https://www.rust-lang.org/)
 
