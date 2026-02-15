@@ -66,3 +66,6 @@ docker-data/
 
 # Benchmark results (JSON files)
 benchmark/results/*.json
+
+# Claude Code local settings
+.claude/settings.local.json
