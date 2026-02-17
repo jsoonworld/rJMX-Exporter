@@ -51,7 +51,7 @@ assert_cmd = "2.0"
 predicates = "3.0"
 wiremock = "0.6"
 criterion = "0.8"
-tempfile = "3.10"
+tempfile = "3.25"
 
 [[bench]]
 name = "collector_bench"
